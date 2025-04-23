@@ -1,267 +1,332 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import sys
 from pathlib import Path
+from typing import Optional, Dict, Any
 
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel,
-                             QVBoxLayout, QAction, QToolBar, QStatusBar,
-                             QMessageBox, QLineEdit)
-from PyQt5.QtGui import QIcon, QFont
-from PyQt5.QtCore import Qt, QSize
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QToolBar,
+    QStatusBar, QMessageBox, QLineEdit, QMenu
+)
+from PySide6.QtGui import QIcon, QFont, QAction, QCloseEvent
+from PySide6.QtCore import Qt, QSize, Slot, Signal
 
-# --- Chemins et fonction get_icon_path (inchangés) ---
-BASE_DIR = Path(__file__).resolve().parent
-ICONS_DIR = BASE_DIR / 'icons_old'
 
-def get_icon_path(icon_name):
-    path = ICONS_DIR / icon_name
-    if not path.is_file():
-        print(f"Avertissement : Icône non trouvée à {path}")
-        return ""
-    return str(path)
+class ResourceManager:
+    """Gestionnaire de ressources pour l'application."""
 
-# 1. Classe de la fenêtre principale
+    BASE_DIR = Path(__file__).resolve().parent
+    ICONS_DIR = BASE_DIR / 'icons_old'
+
+    @classmethod
+    def get_icon_path(cls, icon_name: str) -> str:
+        """Retourne le chemin vers une icône."""
+        path = cls.ICONS_DIR / icon_name
+        if not path.is_file():
+            print(f"Avertissement : Icône non trouvée à {path}")
+            return ""
+        return str(path)
+
+    @classmethod
+    def check_resources(cls) -> bool:
+        """Vérifie si les ressources nécessaires sont disponibles."""
+        return cls.ICONS_DIR.is_dir()
+
+
 class MainWindow(QMainWindow):
+    """Fenêtre principale de l'application de pilotage du robot."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialise la fenêtre principale."""
         super().__init__()
-        self._create_actions()     # 1. Créer les objets Action
-        self._initialiseUI()     # 2. Configurer la fenêtre et appeler les autres helpers
 
-    def _initialiseUI(self):
-        # --- Configuration générale ---
-        self.setWindowTitle('Pilotage du robot (Old)')
+        # Attributs internes
+        self._actions: Dict[str, QAction] = {}
+
+        # Configuration de la fenêtre
+        self.setWindowTitle('Pilotage du robot')
         self.setGeometry(150, 150, 700, 500)
-        self.setWindowIcon(QIcon(get_icon_path('Window-icon.png')))
+        self.setWindowIcon(QIcon(ResourceManager.get_icon_path('Window-icon.png')))
 
-        # --- Appeler les méthodes helper ---
-        self._create_menus()       # Créer les menus
-        self._create_toolbars()    # Créer les toolbars
-        self._create_central_widget() # Créer la zone centrale
-        self._create_statusbar()   # Créer la status bar
-        self._connect_signals() # Connecte les signaux restants (si pas déjà fait dans _creer_actions)
+        # Initialisation de l'interface
+        self._setup_ui()
 
-        # --- Afficher la fenêtre ---
+        # Affichage
         self.show()
 
-    # --- Méthodes Helper ---
+    def _setup_ui(self) -> None:
+        """Configure l'interface utilisateur."""
+        self._create_actions()
+        self._create_menus()
+        self._create_toolbars()
+        self._create_central_widget()
+        self._create_statusbar()
 
-    def _create_actions(self):
-        """Crée toutes les QAction de l'application."""
-        # == Actions Fichier ==
-        self.act_nouveau = QAction(QIcon(get_icon_path('document-new.png')), '&Nouveau', self)
-        self.act_ouvrir = QAction(QIcon(get_icon_path('document-open.png')), '&Ouvrir...', self)
-        self.act_enregistrer = QAction(QIcon(get_icon_path('document-save.png')), '&Enregistrer', self)
-        self.act_enregistrer.setShortcut('Ctrl+S')
-        self.act_enregistrer_sous = QAction(QIcon(get_icon_path('document-save-as.png')), 'Enregistrer &sous...', self)
-        self.act_proprietes = QAction(QIcon(get_icon_path('document-properties.png')), 'P&ropriétés', self)
-        self.act_quitter = QAction(QIcon(get_icon_path('system-log-out.png')), '&Quitter', self)
-        self.act_quitter.setShortcut('Ctrl+Q')
+    def _create_actions(self) -> None:
+        """Crée toutes les actions de l'application."""
+        # Actions du menu Fichier
+        self._add_action('nouveau', 'document-new.png', '&Nouveau',
+                         "Créer un nouveau document")
+        self._add_action('ouvrir', 'document-open.png', '&Ouvrir...',
+                         "Ouvrir un document existant")
+        self._add_action('enregistrer', 'document-save.png', '&Enregistrer',
+                         "Enregistrer le document courant", 'Ctrl+S')
+        self._add_action('enregistrer_sous', 'document-save-as.png', 'Enregistrer &sous...',
+                         "Enregistrer le document sous un nouveau nom")
+        self._add_action('proprietes', 'document-properties.png', 'P&ropriétés',
+                         "Afficher les propriétés du document")
+        self._add_action('quitter', 'system-log-out.png', '&Quitter',
+                         "Quitter l'application", 'Ctrl+Q')
 
-        # == Actions Édition ==
-        self.act_undo = QAction(QIcon(get_icon_path('edit-undo.png')), '&Annuler', self)
-        self.act_undo.setShortcut('Ctrl+Z')
-        self.act_redo = QAction(QIcon(get_icon_path('edit-redo.png')), '&Rétablir', self)
-        self.act_redo.setShortcut('Ctrl+Y')
+        # Actions du menu Édition
+        self._add_action('undo', 'edit-undo.png', '&Annuler',
+                         "Annuler la dernière action", 'Ctrl+Z')
+        self._add_action('redo', 'edit-redo.png', '&Rétablir',
+                         "Rétablir la dernière action annulée", 'Ctrl+Y')
 
-        # == Actions Outils ==
-        self.act_measurement_settings = QAction(QIcon(get_icon_path('preferences-desktop.png')), 'Options Mesures', self)
-        self.act_telecommande = QAction(QIcon(get_icon_path('input-gaming.png')), 'Télécommande', self)
+        # Actions du menu Outils
+        self._add_action('measurement_settings', 'preferences-desktop.png', 'Options Mesures',
+                         "Configurer les options de mesure")
+        self._add_action('telecommande', 'input-gaming.png', 'Télécommande',
+                         "Ouvrir la télécommande")
 
-        # == Actions Aide ==
-        self.act_apropos = QAction(QIcon(get_icon_path('help-browser.png')), '&À propos...', self)
+        # Actions du menu Aide
+        self._add_action('apropos', 'help-browser.png', '&À propos...',
+                         "Afficher les informations sur l'application")
 
-        # == Actions Séquence ==
-        self.act_stop_sequence = QAction(QIcon(get_icon_path('media-playback-stop.png')), '&Séquence', self)
-        self.act_start_sequence = QAction(QIcon(get_icon_path('media-playback-start.png')), '&Séquence', self)
-        self.act_measure_next_point = QAction(QIcon(get_icon_path('one.png')), '&Mesurer', self)
+        # Actions Séquence
+        self._add_action('stop_sequence', 'media-playback-stop.png', 'Arrêter séquence',
+                         "Arrêter la séquence")
+        self._add_action('start_sequence', 'media-playback-start.png', 'Démarrer séquence',
+                         "Démarrer la séquence")
+        self._add_action('measure_next_point', 'one.png', 'Mesurer point suivant',
+                         "Mesurer le prochain point")
 
-        # == Actions Pulse ==
-        self.act_show_pulse = QAction(QIcon(get_icon_path('pulse.png')), '&Afficher Pulse', self)
-        self.act_start_measurement = QAction(QIcon(get_icon_path('Start.png')), '&Démarrer la mesure', self)
-        self.act_save_measurement = QAction(QIcon(get_icon_path('Save_Measurement2.png')), '&Enregistrer la mesure', self)
+        # Actions Pulse
+        self._add_action('show_pulse', 'pulse.png', 'Afficher Pulse',
+                         "Afficher Pulse")
+        self._add_action('start_measurement', 'Start.png', 'Démarrer mesure',
+                         "Démarrer la mesure")
+        self._add_action('save_measurement', 'Save_Measurement2.png', 'Enregistrer mesure',
+                         "Enregistrer la mesure")
 
-        # == Actions Robot ==
-        self.act_stop_robot = QAction(QIcon(get_icon_path('media-playback-pause.png')), '&Arrêter le robot', self)
-        self.act_goto_parking = QAction(QIcon(get_icon_path('media-eject.png')), '&Aller au parking', self)
-        self.act_goto_zero = QAction(QIcon(get_icon_path('go-bottom.png')), '&Aller au zéro', self)
-        self.act_goto_selected = QAction(QIcon(get_icon_path('go-jump.png')), '&Aller à la position sélectionnée', self)
+        # Actions Robot
+        self._add_action('stop_robot', 'media-playback-pause.png', 'Arrêter robot',
+                         "Arrêter le robot")
+        self._add_action('goto_parking', 'media-eject.png', 'Aller au parking',
+                         "Aller au parking")
+        self._add_action('goto_zero', 'go-bottom.png', 'Aller au zéro',
+                         "Aller au zéro")
+        self._add_action('goto_selected', 'go-jump.png', 'Position sélectionnée',
+                         "Aller à la position sélectionnée")
 
-        # Ajouter les StatusTips ici ou dans une méthode séparée si ça devient long
-        self.act_nouveau.setStatusTip("Créer un nouveau document")
-        self.act_ouvrir.setStatusTip("Ouvrir un document existant")
-        self.act_enregistrer.setStatusTip("Enregistrer le document courant")
-        self.act_enregistrer_sous.setStatusTip("Enregistrer le document sous un nouveau nom")
-        self.act_proprietes.setStatusTip("Afficher les propriétés du document")
-        self.act_quitter.setStatusTip("Quitter l'application")
-        self.act_undo.setStatusTip("Annuler la dernière action")
-        self.act_redo.setStatusTip("Rétablir la dernière action annulée")
-        self.act_measurement_settings.setStatusTip("Configurer les options de mesure")
-        self.act_telecommande.setStatusTip("Ouvrir la télécommande")
-        self.act_apropos.setStatusTip("Afficher les informations sur l'application")
-        self.act_stop_sequence.setStatusTip("Arrêter la séquence")
-        self.act_start_sequence.setStatusTip("Démarrer la séquence")
-        self.act_measure_next_point.setStatusTip("Mesurer le prochain point")
-        self.act_show_pulse.setStatusTip("Afficher Pulse")
-        self.act_start_measurement.setStatusTip("Démarrer la mesure")
-        self.act_save_measurement.setStatusTip("Enregistrer la mesure")
-        self.act_stop_robot.setStatusTip("Arrêter le robot")
-        self.act_goto_parking.setStatusTip("Aller au parking")
-        self.act_goto_zero.setStatusTip("Aller au zéro")
-        self.act_goto_selected.setStatusTip("Aller à la position sélectionnée")
-        # ... (etc. pour toutes les actions)
+        # Connexion des signaux
+        self._connect_action_signals()
 
-    def _create_menus(self):
+    def _add_action(self, name: str, icon_file: str, text: str,
+                    status_tip: str, shortcut: str = None) -> None:
+        """Ajoute une action à la collection d'actions."""
+        action = QAction(QIcon(ResourceManager.get_icon_path(icon_file)), text, self)
+        if shortcut:
+            action.setShortcut(shortcut)
+        action.setStatusTip(status_tip)
+        self._actions[name] = action
+
+    def _connect_action_signals(self) -> None:
+        """Connecte les signaux des actions aux slots."""
+        # Fichier
+        self._actions['nouveau'].triggered.connect(lambda: self._on_action("Nouveau"))
+        self._actions['ouvrir'].triggered.connect(lambda: self._on_action("Ouvrir"))
+        self._actions['enregistrer'].triggered.connect(lambda: self._on_action("Enregistrer"))
+        self._actions['enregistrer_sous'].triggered.connect(lambda: self._on_action("Enregistrer sous"))
+        self._actions['proprietes'].triggered.connect(lambda: self._on_action("Propriétés"))
+        self._actions['quitter'].triggered.connect(self.close)
+
+        # Édition
+        self._actions['undo'].triggered.connect(lambda: self._on_action("Annuler"))
+        self._actions['redo'].triggered.connect(lambda: self._on_action("Rétablir"))
+
+        # Outils
+        self._actions['measurement_settings'].triggered.connect(
+            lambda: self._on_action("Options Mesures"))
+        self._actions['telecommande'].triggered.connect(
+            lambda: self._on_action("Télécommande"))
+
+        # Aide
+        self._actions['apropos'].triggered.connect(self._on_about)
+
+        # Séquence
+        self._actions['stop_sequence'].triggered.connect(
+            lambda: self._on_action("Arrêter Séquence"))
+        self._actions['start_sequence'].triggered.connect(
+            lambda: self._on_action("Démarrer Séquence"))
+        self._actions['measure_next_point'].triggered.connect(
+            lambda: self._on_action("Mesurer Prochain Point"))
+
+        # Pulse
+        self._actions['show_pulse'].triggered.connect(lambda: self._on_action("Afficher Pulse"))
+        self._actions['start_measurement'].triggered.connect(
+            lambda: self._on_action("Démarrer Mesure"))
+        self._actions['save_measurement'].triggered.connect(
+            lambda: self._on_action("Enregistrer Mesure"))
+
+        # Robot
+        self._actions['stop_robot'].triggered.connect(lambda: self._on_action("Arrêter Robot"))
+        self._actions['goto_parking'].triggered.connect(
+            lambda: self._on_action("Aller au Parking"))
+        self._actions['goto_zero'].triggered.connect(lambda: self._on_action("Aller au Zéro"))
+        self._actions['goto_selected'].triggered.connect(
+            lambda: self._on_action("Aller à la Position Sélectionnée"))
+
+    def _create_menus(self) -> None:
         """Crée la barre de menu et les menus."""
         menu_bar = self.menuBar()
 
+        # Menu Fichier
         menu_fichier = menu_bar.addMenu('&Fichier')
-        menu_fichier.addAction(self.act_nouveau)
+        menu_fichier.addAction(self._actions['nouveau'])
         menu_fichier.addSeparator()
-        menu_fichier.addAction(self.act_ouvrir)
-        menu_fichier.addAction(self.act_enregistrer)
-        menu_fichier.addAction(self.act_enregistrer_sous)
+        menu_fichier.addAction(self._actions['ouvrir'])
+        menu_fichier.addAction(self._actions['enregistrer'])
+        menu_fichier.addAction(self._actions['enregistrer_sous'])
         menu_fichier.addSeparator()
-        menu_fichier.addAction(self.act_quitter)
+        menu_fichier.addAction(self._actions['quitter'])
 
+        # Menu Édition
         menu_edition = menu_bar.addMenu('&Édition')
-        menu_edition.addAction(self.act_undo)
-        menu_edition.addAction(self.act_redo)
+        menu_edition.addAction(self._actions['undo'])
+        menu_edition.addAction(self._actions['redo'])
 
-
+        # Menu Outils
         menu_outils = menu_bar.addMenu('&Outils')
-        menu_outils.addAction(self.act_measurement_settings)
+        menu_outils.addAction(self._actions['measurement_settings'])
         menu_outils.addSeparator()
-        menu_outils.addAction(self.act_telecommande)
+        menu_outils.addAction(self._actions['telecommande'])
 
+        # Menu Aide
         menu_aide = menu_bar.addMenu('&Aide')
-        menu_aide.addAction(self.act_apropos)
-        # ... (actions aide) ...
+        menu_aide.addAction(self._actions['apropos'])
 
-    def _create_toolbars(self):
+    def _create_toolbars(self) -> None:
         """Crée les barres d'outils."""
+        # Toolbar Séquence
         toolbar_sequence = QToolBar("Outils Séquence")
         toolbar_sequence.setIconSize(QSize(24, 24))
         self.addToolBar(toolbar_sequence)
         toolbar_sequence.addWidget(QLabel("Séquence : "))
-        toolbar_sequence.addAction(self.act_stop_sequence)
-        toolbar_sequence.addAction(self.act_start_sequence)
-        toolbar_sequence.addAction(self.act_measure_next_point)
+        toolbar_sequence.addAction(self._actions['stop_sequence'])
+        toolbar_sequence.addAction(self._actions['start_sequence'])
+        toolbar_sequence.addAction(self._actions['measure_next_point'])
 
+        # Toolbar Pulse
         toolbar_pulse = QToolBar("Outils Pulse")
         toolbar_pulse.setIconSize(QSize(24, 24))
         toolbar_pulse.setFixedWidth(300)
         self.addToolBar(toolbar_pulse)
         toolbar_pulse.addWidget(QLabel("Pulse : "))
-        toolbar_pulse.addAction(self.act_show_pulse)
-        toolbar_pulse.addAction(self.act_start_measurement)
+        toolbar_pulse.addAction(self._actions['show_pulse'])
+        toolbar_pulse.addAction(self._actions['start_measurement'])
         toolbar_pulse.addSeparator()
         toolbar_pulse.addWidget(QLineEdit("Fichier_mesure.txt"))
-        toolbar_pulse.addAction(self.act_save_measurement)
+        toolbar_pulse.addAction(self._actions['save_measurement'])
 
+        # Toolbar Robot (nouvelle rangée)
         toolbar_robot = QToolBar("Outils Robot")
         toolbar_robot.setIconSize(QSize(24, 24))
-        self.addToolBarBreak(Qt.TopToolBarArea) # S'assure que la barre de robot est en haut
+        self.addToolBarBreak(Qt.ToolBarArea.TopToolBarArea)
         self.addToolBar(toolbar_robot)
         toolbar_robot.addWidget(QLabel("Robot : "))
-        toolbar_robot.addAction(self.act_stop_robot)
-        toolbar_robot.addAction(self.act_goto_parking)
-        toolbar_robot.addAction(self.act_goto_zero)
-        toolbar_robot.addAction(self.act_goto_selected)
+        toolbar_robot.addAction(self._actions['stop_robot'])
+        toolbar_robot.addAction(self._actions['goto_parking'])
+        toolbar_robot.addAction(self._actions['goto_zero'])
+        toolbar_robot.addAction(self._actions['goto_selected'])
 
+        # Toolbar Fichier
         toolbar_fichier = QToolBar("Outils Fichier")
         toolbar_fichier.setIconSize(QSize(24, 24))
         self.addToolBar(toolbar_fichier)
-        toolbar_fichier.addAction(self.act_nouveau)
-        toolbar_fichier.addAction(self.act_ouvrir)
-        toolbar_fichier.addAction(self.act_enregistrer)
+        toolbar_fichier.addAction(self._actions['nouveau'])
+        toolbar_fichier.addAction(self._actions['ouvrir'])
+        toolbar_fichier.addAction(self._actions['enregistrer'])
 
+        # Toolbar Édition (barre verticale à gauche)
         toolbar_edition = QToolBar("Outils Édition")
         toolbar_edition.setIconSize(QSize(24, 24))
-        toolbar_edition.setOrientation(Qt.Vertical)
-        self.addToolBar(Qt.LeftToolBarArea,toolbar_edition) # S'ajoute à côté ou en dessous par défaut
-        toolbar_edition.addAction(self.act_undo)
+        toolbar_edition.setOrientation(Qt.Orientation.Vertical)
+        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, toolbar_edition)
+        toolbar_edition.addAction(self._actions['undo'])
 
-    def _create_central_widget(self):
+    def _create_central_widget(self) -> None:
         """Crée le widget central et son contenu."""
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
 
         layout_principal = QVBoxLayout(central_widget)
         label_central = QLabel("Zone Principale", self)
-        label_central.setAlignment(Qt.AlignCenter)
+        label_central.setAlignment(Qt.AlignmentFlag.AlignCenter)
         font = label_central.font()
         font.setPointSize(18)
         label_central.setFont(font)
         layout_principal.addWidget(label_central)
 
-    def _create_statusbar(self):
+    def _create_statusbar(self) -> None:
         """Configure la barre de statut."""
         self.statusBar().showMessage('Prêt')
 
-    def _connect_signals(self):
-        """Connecte les signaux des actions aux slots."""
-        # Fichier
-        self.act_nouveau.triggered.connect(lambda: self.simuler_action("Nouveau"))
-        self.act_ouvrir.triggered.connect(lambda: self.simuler_action("Ouvrir"))
-        self.act_enregistrer.triggered.connect(lambda: self.simuler_action("Enregistrer"))
-        self.act_enregistrer_sous.triggered.connect(lambda: self.simuler_action("Enregistrer sous"))
-        self.act_proprietes.triggered.connect(lambda: self.simuler_action("Propriétés"))
-        self.act_quitter.triggered.connect(self.close)
+    # --- Slots ---
+    @Slot(str)
+    def _on_action(self, action_name: str) -> None:
+        """Gère les actions génériques."""
+        print(f"Action déclenchée : {action_name}")
+        self.statusBar().showMessage(f"Action : {action_name}", 3000)
 
-        # Édition
-        self.act_undo.triggered.connect(lambda: self.simuler_action("Annuler (Undo)"))
-        self.act_redo.triggered.connect(lambda: self.simuler_action("Rétablir (Redo)"))
+    @Slot()
+    def _on_about(self) -> None:
+        """Affiche la boîte de dialogue À propos."""
+        print("Action déclenchée : À propos")
+        QMessageBox.about(
+            self,
+            "À propos...",
+            "Logiciel de pilotage du robot v0.1\nPour l'UMRAE."
+        )
 
-        # Outils
-        self.act_measurement_settings.triggered.connect(lambda: self.simuler_action("Options Mesures"))
-        self.act_telecommande.triggered.connect(lambda: self.simuler_action("Télécommande"))
-
-        # Aide
-        self.act_apropos.triggered.connect(self.afficher_apropos)
-
-        # Séquence
-        self.act_stop_sequence.triggered.connect(lambda: self.simuler_action("Arrêter Séquence"))
-        self.act_start_sequence.triggered.connect(lambda: self.simuler_action("Démarrer Séquence"))
-        self.act_measure_next_point.triggered.connect(lambda: self.simuler_action("Mesurer Prochain Point"))
-
-        # Pulse
-        self.act_show_pulse.triggered.connect(lambda: self.simuler_action("Afficher Pulse"))
-        self.act_start_measurement.triggered.connect(lambda: self.simuler_action("Démarrer Mesure"))
-        self.act_save_measurement.triggered.connect(lambda: self.simuler_action("Enregistrer Mesure"))
-
-        # Robot
-        self.act_stop_robot.triggered.connect(lambda: self.simuler_action("Arrêter Robot"))
-        self.act_goto_parking.triggered.connect(lambda: self.simuler_action("Aller au Parking"))
-        self.act_goto_zero.triggered.connect(lambda: self.simuler_action("Aller au Zéro"))
-        self.act_goto_selected.triggered.connect(lambda: self.simuler_action("Aller à la Position Sélectionnée"))
-
-
-    # --- Slots (inchangés) ---
-    def simuler_action(self, nom_action):
-        print(f"Action déclenchée : {nom_action}")
-        self.statusBar().showMessage(f"Action : {nom_action}", 3000)
-
-    def basculer_plein_ecran(self, checked):
-        if checked: self.showFullScreen()
-        else: self.showNormal()
+    @Slot(bool)
+    def _on_toggle_fullscreen(self, checked: bool) -> None:
+        """Bascule l'affichage en plein écran."""
+        if checked:
+            self.showFullScreen()
+        else:
+            self.showNormal()
         status = "Plein Écran Activé" if checked else "Plein Écran Désactivé"
         self.statusBar().showMessage(status, 3000)
         print(f"Action déclenchée : {status}")
 
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Gère l'événement de fermeture de la fenêtre."""
+        reponse = QMessageBox.question(
+            self, 'Confirmation', "Quitter l'application ?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reponse == QMessageBox.StandardButton.Yes:
+            event.accept()
+        else:
+            event.ignore()
 
-    def afficher_apropos(self):
-        print("Action déclenchée : À propos")
-        QMessageBox.about(self, "À propos...", "Logiciel de pilotage du robot v0.1\nPour l'UMRAE.")
 
-    def closeEvent(self, event):
-         reponse = QMessageBox.question(self, 'Confirmation', "Quitter ?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-         if reponse == QMessageBox.Yes: event.accept()
-         else: event.ignore()
+def main() -> int:
+    """Fonction principale de l'application."""
+    # Vérifier les ressources
+    if not ResourceManager.check_resources():
+        print(f"Erreur critique : Le dossier d'icônes '{ResourceManager.ICONS_DIR}' est introuvable.")
+        return 1
 
-# --- Point d'entrée (inchangé) ---
-if __name__ == '__main__':
-    if not ICONS_DIR.is_dir():
-        print(f"Erreur Critique : Le dossier d'icônes '{ICONS_DIR}' est introuvable.")
-        sys.exit(1)
+    # Créer et exécuter l'application
     app = QApplication(sys.argv)
     fenetre = MainWindow()
-    sys.exit(app.exec_())
+    return app.exec()
+
+
+if __name__ == '__main__':
+    sys.exit(main())
