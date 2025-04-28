@@ -7,7 +7,8 @@ from typing import Optional, Dict, Any
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QToolBar,
-    QStatusBar, QMessageBox, QLineEdit, QMenu
+    QStatusBar, QMessageBox, QLineEdit, QMenu, QGridLayout, QFrame, QSplitter, QListWidget, QSizePolicy, QFormLayout,
+    QSpinBox, QHBoxLayout, QTableWidget, QHeaderView, QTableWidgetItem
 )
 from PySide6.QtGui import QIcon, QFont, QAction, QCloseEvent
 from PySide6.QtCore import Qt, QSize, Slot, Signal
@@ -56,12 +57,16 @@ class MainWindow(QMainWindow):
         self.show()
 
     def _setup_ui(self) -> None:
-        """Configure l'interface utilisateur."""
+        """Configure l'interface utilisateur responsive."""
         self._create_actions()
         self._create_menus()
         self._create_toolbars()
         self._create_central_widget()
         self._create_statusbar()
+
+        # Configuration de base pour le responsive design
+        self.setMinimumSize(500, 400)  # Taille minimale raisonnable
+        QApplication.instance().setStyle("Fusion")  # Style moderne et adaptable
 
     def _create_actions(self) -> None:
         """Crée toutes les actions de l'application."""
@@ -121,11 +126,21 @@ class MainWindow(QMainWindow):
         self._add_action('goto_selected', 'go-jump.png', 'Position sélectionnée',
                          "Aller à la position sélectionnée")
 
+        # Actions Édition de la liste de points
+        self._add_action('delete_point', 'emblem-unreadable.png', 'Supprimer un point',
+                         "Supprimer le point sélectionné")
+        self._add_action('add_point', 'list-add.png', 'Ajouter un point',
+                         "Ajouter un nouveau point")
+        self._add_action('move_point_up', 'go-up.png', 'Déplacer un point vers le haut',
+                         "Déplacer le point sélectionné vers le haut")
+        self._add_action('move_point_down', 'go-down.png', 'Déplacer un point vers le bas',
+                         "Déplacer le point sélectionné vers le bas")
+
         # Connexion des signaux
         self._connect_action_signals()
 
-    def _add_action(self, name: str, icon_file: str, text: str,
-                    status_tip: str, shortcut: str = None) -> None:
+
+    def _add_action(self, name: str, icon_file: str, text: str, status_tip: str, shortcut: str = None) -> None:
         """Ajoute une action à la collection d'actions."""
         action = QAction(QIcon(ResourceManager.get_icon_path(icon_file)), text, self)
         if shortcut:
@@ -178,6 +193,19 @@ class MainWindow(QMainWindow):
         self._actions['goto_zero'].triggered.connect(lambda: self._on_action("Aller au Zéro"))
         self._actions['goto_selected'].triggered.connect(
             lambda: self._on_action("Aller à la Position Sélectionnée"))
+
+        # Point list edition
+        self._actions['delete_point'].triggered.connect(lambda: self._on_action("Supprimer un Point"))
+        self._actions['add_point'].triggered.connect(lambda: self._on_action("Ajouter un Point"))
+        self._actions['move_point_up'].triggered.connect(lambda: self._on_action("Déplacer un Point vers le Haut"))
+        self._actions['move_point_down'].triggered.connect(lambda: self._on_action("Déplacer un Point vers le Bas"))
+
+        self._actions['delete_point'].triggered.connect(self._delete_point)
+        self._actions['add_point'].triggered.connect(self._add_point)
+        self._actions['move_point_up'].triggered.connect(self._move_point_up)
+        self._actions['move_point_down'].triggered.connect(self._move_point_down)
+
+
 
     def _create_menus(self) -> None:
         """Crée la barre de menu et les menus."""
@@ -242,37 +270,222 @@ class MainWindow(QMainWindow):
         toolbar_robot.addAction(self._actions['goto_zero'])
         toolbar_robot.addAction(self._actions['goto_selected'])
 
-        # Toolbar Fichier
-        toolbar_fichier = QToolBar("Outils Fichier")
-        toolbar_fichier.setIconSize(QSize(24, 24))
-        self.addToolBar(toolbar_fichier)
-        toolbar_fichier.addAction(self._actions['nouveau'])
-        toolbar_fichier.addAction(self._actions['ouvrir'])
-        toolbar_fichier.addAction(self._actions['enregistrer'])
 
         # Toolbar Édition (barre verticale à gauche)
         toolbar_edition = QToolBar("Outils Édition")
         toolbar_edition.setIconSize(QSize(24, 24))
         toolbar_edition.setOrientation(Qt.Orientation.Vertical)
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, toolbar_edition)
+        toolbar_edition.addAction(self._actions['delete_point'])
+        toolbar_edition.addAction(self._actions['add_point'])
+        toolbar_edition.addSeparator()
+        toolbar_edition.addAction(self._actions['move_point_up'])
+        toolbar_edition.addAction(self._actions['move_point_down'])
+        toolbar_edition.addSeparator()
         toolbar_edition.addAction(self._actions['undo'])
+        toolbar_edition.addAction(self._actions['redo'])
 
     def _create_central_widget(self) -> None:
-        """Crée le widget central et son contenu."""
+        """Crée un widget central avec un tableau de points."""
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
 
-        layout_principal = QVBoxLayout(central_widget)
-        label_central = QLabel("Zone Principale", self)
-        label_central.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        font = label_central.font()
-        font.setPointSize(18)
-        label_central.setFont(font)
-        layout_principal.addWidget(label_central)
+        # Layout principal
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+
+        # Titre du tableau
+        title_label = QLabel("Liste des points à mesurer")
+        title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(title_label)
+
+        # Création du tableau
+        self.points_table = QTableWidget()
+        self.points_table.setColumnCount(5)  # 5 colonnes au lieu de 6
+        self.points_table.setHorizontalHeaderLabels(["X (mm)", "Y (mm)", "Z (mm)", "θ (°)", "φ (°)"])
+
+        # Activer les numéros de ligne par défaut
+        self.points_table.verticalHeader().setVisible(True)
+
+        # Configuration du tableau pour qu'il soit responsive
+        self.points_table.horizontalHeader().setStretchLastSection(True)
+        self.points_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.points_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # Exemple de données
+        self._populate_table_with_sample_data()
+
+        main_layout.addWidget(self.points_table)
+
+        # Connecter les signaux pour la manipulation des points
+        self.points_table.itemSelectionChanged.connect(self._update_point_actions_state)
+
+    def _populate_table_with_sample_data(self) -> None:
+        """Remplit le tableau avec des données d'exemple."""
+        sample_points = [
+            (50.0, 100.0, 150.0, 30.0, 45.0),
+            (75.0, 125.0, 175.0, 40.0, 50.0),
+            (100.0, 150.0, 200.0, 50.0, 55.0),
+            (125.0, 175.0, 225.0, 60.0, 60.0),
+        ]
+
+        self.points_table.setRowCount(len(sample_points))
+
+        for row, point in enumerate(sample_points):
+            # Coordonnées X, Y, Z, θ, φ
+            for col, value in enumerate(point):
+                item = QTableWidgetItem(f"{value:.2f}")
+                item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.points_table.setItem(row, col, item)
+
+    def _update_point_actions_state(self) -> None:
+        """Met à jour l'état des actions liées aux points en fonction de la sélection."""
+        selected_rows = self.points_table.selectionModel().selectedRows()
+        has_selection = len(selected_rows) > 0
+
+        # Activer/désactiver les actions de manipulation des points
+        self._actions['delete_point'].setEnabled(has_selection)
+        self._actions['goto_selected'].setEnabled(has_selection)
+
+        # Activer/désactiver les actions de déplacement selon la position
+        if has_selection:
+            row = selected_rows[0].row()
+            self._actions['move_point_up'].setEnabled(row > 0)
+            self._actions['move_point_down'].setEnabled(row < self.points_table.rowCount() - 1)
+        else:
+            self._actions['move_point_up'].setEnabled(False)
+            self._actions['move_point_down'].setEnabled(False)
+
+    def _move_point_up(self) -> None:
+        """Déplace le point sélectionné vers le haut dans la liste."""
+        selected_rows = self.points_table.selectionModel().selectedRows()
+        if not selected_rows:
+            return
+
+        current_row = selected_rows[0].row()
+        if current_row <= 0:
+            return
+
+        # Échanger les données entre lignes
+        for col in range(self.points_table.columnCount()):
+            current_item = self.points_table.item(current_row, col)
+            above_item = self.points_table.item(current_row - 1, col)
+
+            if current_item and above_item:
+                current_text = current_item.text()
+                above_text = above_item.text()
+
+                current_item.setText(above_text)
+                above_item.setText(current_text)
+
+        # Sélectionner la ligne déplacée
+        self.points_table.selectRow(current_row - 1)
+
+    def _move_point_down(self) -> None:
+        """Déplace le point sélectionné vers le bas dans la liste."""
+        selected_rows = self.points_table.selectionModel().selectedRows()
+        if not selected_rows:
+            return
+
+        current_row = selected_rows[0].row()
+        if current_row >= self.points_table.rowCount() - 1:
+            return
+
+        # Échanger les données entre lignes
+        for col in range(self.points_table.columnCount()):
+            current_item = self.points_table.item(current_row, col)
+            below_item = self.points_table.item(current_row + 1, col)
+
+            if current_item and below_item:
+                current_text = current_item.text()
+                below_text = below_item.text()
+
+                current_item.setText(below_text)
+                below_item.setText(current_text)
+
+        # Sélectionner la ligne déplacée
+        self.points_table.selectRow(current_row + 1)
+
+    def _add_point(self) -> None:
+        """Ajoute un nouveau point à la liste."""
+        row_count = self.points_table.rowCount()
+        self.points_table.insertRow(row_count)
+
+        # Remplir les nouvelles cellules avec des valeurs par défaut
+        for col in range(self.points_table.columnCount()):
+            item = QTableWidgetItem("0.00")
+            item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self.points_table.setItem(row_count, col, item)
+
+        # Sélectionner la nouvelle ligne
+        self.points_table.selectRow(row_count)
+
+    def _delete_point(self) -> None:
+        """Supprime le point sélectionné de la liste."""
+        selected_rows = self.points_table.selectionModel().selectedRows()
+        if not selected_rows:
+            return
+
+        # Supprimer les lignes sélectionnées (en commençant par la dernière pour éviter les décalages)
+        for row in sorted(selected_rows, reverse=True):
+            self.points_table.removeRow(row.row())
+
+        # Mettre à jour l'état des actions
+        self._update_point_actions_state()
 
     def _create_statusbar(self) -> None:
-        """Configure la barre de statut."""
-        self.statusBar().showMessage('Prêt')
+        """Configure la barre d'état responsive."""
+        status_bar = self.statusBar()
+        status_bar.showMessage('Prêt')
+
+        # Widget de coordonnées avec layout
+        coord_widget = QWidget()
+        coord_layout = QHBoxLayout(coord_widget)
+        coord_layout.setContentsMargins(5, 0, 5, 0)
+        coord_layout.setSpacing(30) # Espacement entre les éléments X:50mm---Y:100mm etc
+
+        # Labels pour chaque coordonnée avec politiques de taille
+        self.coord_values = {}
+        for coord, unit in [('X', 'mm'), ('Y', 'mm'), ('Z', 'mm'), ('θ', '°'), ('φ', '°')]:
+            coord_container = QWidget()
+            container_layout = QHBoxLayout(coord_container)
+            container_layout.setContentsMargins(0, 0, 0, 0)
+            container_layout.setSpacing(2) # Espacement entre les éléments X:---50---mm etc
+
+            # Label avec le nom de la coordonnée
+            label = QLabel(f"{coord}:")
+
+            # Label pour la valeur
+            value = QLabel("0.00")
+            value.setMinimumWidth(40)  # Largeur minimale au lieu de fixe
+            value.setAlignment(Qt.AlignmentFlag.AlignRight)
+            value.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+            value.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+            self.coord_values[coord] = value
+
+            # Label pour l'unité
+            unit_label = QLabel(unit)
+
+            # Ajouter au layout du conteneur
+            container_layout.addWidget(label)
+            container_layout.addWidget(value)
+            container_layout.addWidget(unit_label)
+
+            # Ajouter le conteneur au layout principal
+            coord_layout.addWidget(coord_container)
+
+        self.update_robot_coordinates(50, 100, 150, 30, 45)  # Exemple de mise à jour des coordonnées
+
+        # Ajouter le widget à la barre d'état
+        status_bar.addPermanentWidget(coord_widget)
+
+    def update_robot_coordinates(self, x=0, y=0, z=0, theta=0, phi=0) -> None:
+        """Met à jour l'affichage des coordonnées du robot."""
+        coords = {'X': x, 'Y': y, 'Z': z, 'θ': theta, 'φ': phi}
+        for key, value in coords.items():
+            if key in self.coord_values:
+                self.coord_values[key].setText(f"{value:.2f}")
 
     # --- Slots ---
     @Slot(str)
