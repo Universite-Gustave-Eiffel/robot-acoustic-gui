@@ -1,102 +1,110 @@
 import win32com.client
 import sys
 import os
-import time # Utile pour les pauses pour laisser Pulse s'initialiser
+import time
 
 # --- Configuration ---
-# Le ProgID de l'application Pulse Labshop.
 pulse_progid = 'Pulse.Labshop.Application'
+
+# Chemin vers un fichier de configuration Pulse (.cfg) existant.
+# REMPLACEZ CE CHEMIN par un chemin valide sur votre système.
+# Cherchez dans les répertoires de projets prédéfinis de votre installation Pulse.
+# Exemple: r'C:\Program Files (x86)\Bruel and Kjaer\PULSE\Projects\Smart Start\Smart Start_Config.cfg'
+config_file_path = r'pulse_configurations/test-configuration.cfg' # <--- À REMPLACER !
 
 # --- Script de test ---
 pulse_app = None
-current_project = None # Initialiser la référence du projet à None
-config_org = None # Initialiser la référence de l'organisateur de configuration à None
+current_project = None
+config_org = None
 
 try:
     print(f"Tentative de connexion ou de lancement de Pulse Labshop avec le ProgID : {pulse_progid}...")
-
-    # Tenter de se connecter à une instance existante d'abord
     try:
         pulse_app = win32com.client.GetActiveObject(pulse_progid)
         print("Connecté à une instance existante de Pulse Labshop.")
     except Exception:
-        # Si aucune instance n'est trouvée, lancer une nouvelle instance en utilisant EnsureDispatch.
-        print("Aucune instance existante trouvée. Lancement d'une nouvelle instance...")
+        print("Pas d'instance existante trouvée. Lancement d'une nouvelle instance...")
         pulse_app = win32com.client.gencache.EnsureDispatch(pulse_progid)
         print("Nouvelle instance de Pulse Labshop lancée et connectée.")
 
     print("-" * 20)
     print("Informations de l'objet Application Pulse :")
-
-    # Obtenir la version de l'application
     try:
         version = pulse_app.Version
         print(f"Version de l'application : {version}")
     except Exception as e_version:
         print(f"Erreur lors de l'accès à la version : {e_version}", file=sys.stderr)
 
-    # Rendre l'application visible si nécessaire
     try:
         is_visible = pulse_app.Visible
         print(f"L'application Pulse est actuellement visible : {is_visible}")
-
         if not is_visible:
             print("Rendre l'application Pulse visible...")
-            time.sleep(1) # Pause pour laisser l'UI se charger
+            time.sleep(1)
             pulse_app.Visible = True
-            print("Application Pulse rendue visible.")
-            time.sleep(1) # Pause supplémentaire après avoir rendu visible
+            time.sleep(1)
         else:
             print("L'application Pulse était déjà visible.")
     except Exception as e_visible:
          print(f"Erreur lors de l'accès à la propriété 'Visible' : {e_visible}", file=sys.stderr)
 
     print("-" * 20)
-    # --- Créer un nouveau projet ---
     # Votre test a confirmé que NewProject() et l'accès à Project fonctionnent avec une pause.
     print("Création d'un nouveau projet...")
     try:
         pulse_app.NewProject()
         print("Nouveau projet créé.")
-        # Pause pour laisser l'application initialiser le nouveau projet et les organisateurs.
-        time.sleep(3)
+        time.sleep(3) # Pause pour initialisation
 
-        # Accéder à l'objet Project
         print("\nAccès à l'objet Project...")
         current_project = pulse_app.Project
 
         if current_project is not None:
             print(f"Accès à l'objet Project actuel réussi.")
-            # Accéder au nom du projet
             try:
                 project_name = current_project.Name
                 print(f"Nom du projet actuel : {project_name}")
 
-                # --- Accéder et interagir avec l'Organisateur de Configuration ---
-                # Vous avez vu que current_project.ConfigurationOrganiser renvoie un objet.
-                # D'après le dump .tlb, ConfigurationOrganiser (Type 86) implémente IConfigurationSystem (Type 85).
-                # IConfigurationSystem a une méthode DetectFrontend().
+                # --- Accéder à l'Organisateur de Configuration et tester des méthodes ---
                 print("\nAccès à l'Organisateur de Configuration...")
                 try:
                     config_org = current_project.ConfigurationOrganiser
-                    print(f"Accès à l'Organisateur de Configuration réussi : {config_org}")
+                    print(f"Accès à l'Organisateur de Configuration réussi.")
 
-                    print("Appel de la méthode DetectFrontend() sur l'Organisateur de Configuration...")
-                    # Appel de la méthode DetectFrontend().
-                    # D'après le fichier d'aide (page 33), cela "forces the system to detect the front-end hardware".
-                    # La méthode ne semble pas prendre d'arguments basés sur le dump (Type 85).
+                    # Test: Appeler DetectFrontend() - Votre test a confirmé que cela fonctionne.
+                    print("Test : Appel de la méthode DetectFrontend() sur l'Organisateur de Configuration...")
                     config_org.DetectFrontend()
                     print("Appel de DetectFrontend() terminé.")
-                    # Une pause peut être utile ici pour laisser la détection se terminer
-                    time.sleep(5) # Ajustez cette pause si nécessaire en fonction du temps de détection réel
+                    time.sleep(5) # Pause pour laisser la détection se terminer
+
+                    # Test: Appeler LoadConfiguration() - Nouvelle étape à vérifier
+                    if os.path.exists(config_file_path):
+                        print(f"\nTest : Chargement de la configuration depuis le fichier : {config_file_path}...")
+                        try:
+                            # LoadConfiguration est listée dans IConfigurationSystem (Type 85)
+                            # Elle prend le chemin du fichier .cfg comme argument.
+                            config_org.LoadConfiguration(config_file_path)
+                            print("Chargement de la configuration terminé.")
+                            time.sleep(2) # Pause pour mise à jour de l'UI
+
+                        except Exception as e_load_config:
+                             print(f"Erreur lors du test de chargement de la configuration : {e_load_config}", file=sys.stderr)
+                             print("Vérifiez que le chemin du fichier .cfg est correct et que le fichier est valide pour cette version de Pulse.", file=sys.stderr)
+                    else:
+                        print(f"\nATTENTION : Le fichier de configuration spécifié n'existe pas : {config_file_path}", file=sys.stderr)
+                        print("Impossible de tester LoadConfiguration(). Veuillez modifier le chemin dans le script.", file=sys.stderr)
+
+                    # --- Ajoutez ici des tests pour d'autres méthodes de config_org si nécessaire ---
+                    # Ex: config_org.AddSignal("Input 1", "NewSignalName")
+                    # Ex: config_org.GetNoOfInputChannels()
+                    # Référez-vous au dump IConfigurationSystem (Type 85) pour les noms.
+
 
                 except AttributeError:
-                    print("La propriété 'ConfigurationOrganiser' ou la méthode 'DetectFrontend()' n'a pas été trouvée/accessible.")
-                except Exception as e_config_org:
-                    print(f"Erreur lors de l'accès/appel à l'Organisateur de Configuration : {e_config_org}", file=sys.stderr)
+                    print("La propriété 'ConfigurationOrganiser' ou une méthode testée sur cet objet n'a pas été trouvée/accessible.")
+                except Exception as e_config_org_access:
+                    print(f"Erreur lors de l'accès/appel à l'Organisateur de Configuration : {e_config_org_access}", file=sys.stderr)
 
-                # --- Vous pouvez ajouter d'autres interactions avec config_org ici ---
-                # Ex: config_org.LoadConfiguration("C:\\chemin\\vers\\config.cfg")
 
             except Exception as e_project_details:
                 print(f"Erreur lors de l'accès aux détails du projet : {e_project_details}", file=sys.stderr)
@@ -108,9 +116,8 @@ try:
          print(f"Erreur lors de la création ou de l'accès au projet : {e_project_creation}", file=sys.stderr)
 
     print("-" * 20)
-    # --- Attendre l'utilisateur avant de terminer ---
     print("\nTests de communication étendus terminés.")
-    print("Vérifiez la fenêtre de Pulse Labshop (un nouveau projet devrait être ouvert et une détection front-end lancée).")
+    print("Vérifiez la fenêtre de Pulse Labshop.")
     print("Appuyez sur Entrée dans cette console pour terminer le script Python.")
     input()
 
@@ -121,8 +128,6 @@ except Exception as e_general:
     print("Vérifiez que le ProgID est correct et que Pulse Labshop est correctement installé.", file=sys.stderr)
 
 finally:
-    # Libérer les références aux objets COM.
-    # Important pour éviter les fuites de mémoire et permettre à Pulse de s'arrêter proprement si nécessaire.
     if config_org is not None:
         config_org = None
         print("Référence Python à l'Organisateur de Configuration libérée.")
@@ -132,8 +137,7 @@ finally:
         print("Référence Python à l'objet Project libérée.")
 
     if pulse_app is not None:
-        # Ne pas appeler .Exit() ou .Quit() ici si vous voulez laisser l'application ouverte après le script.
-        # Si vous voulez la fermer, ajoutez pulse_app.Exit() ou pulse_app.Quit() ici.
+        # Pour fermer l'application à la fin, décommentez la section ci-dessous
         # print("Tentative de fermer Pulse Labshop...")
         # try:
         #     pulse_app.Exit() # ou pulse_app.Quit()
@@ -142,6 +146,5 @@ finally:
         #      print(f"Erreur lors de la tentative de fermeture de Pulse Labshop : {quit_e}", file=sys.stderr)
         pulse_app = None
         print("Référence Python à l'objet Application libérée.")
-
 
 print("Fin du script de test.")
