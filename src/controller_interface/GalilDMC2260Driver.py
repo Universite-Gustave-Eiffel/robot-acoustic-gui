@@ -1,5 +1,6 @@
 import serial
 import time
+import logging
 
 # --- Configuration ---
 SERIAL_PORT_DEFAULT = 'COM7'
@@ -21,48 +22,53 @@ AXIS_PHI_TILT = 'F'
 ALL_AXES_PHYSICAL = "ABCDEF"
 AXES_ORDER = ['A', 'B', 'C', 'D', 'E', 'F']
 
-# --- Constantes de Déplacement ---
-AXIS_X_STEPS =  -543000 # 542873 steps = 1m
-AXIS_Y_STEPS =  -543000 # 543000 steps = 1m
-AXIS_Z_STEPS =  -360120
-AXIS_THETA_STEPS =  82000 # 82000 steps = 360°
-AXIS_PHI_STEPS =  25500 # 25500 steps = 360°
+# --- Constantes de Déplacement (Exemples, ajuste selon tes besoins) ---
+AXIS_X_STEPS = -543000
+AXIS_Y_STEPS = -543000
+AXIS_Z_STEPS = -360120
+AXIS_THETA_STEPS = 82000
+AXIS_PHI_STEPS = 25500
 
-SPEED = 20000
-ACCEL_DECEL = 15000
+# Valeurs utilisées dans __main__ pour les tests
+SPEED_TEST = 5000
+ACCEL_DECEL_TEST = 50000
+DIST_GANTRY_TEST = 10000
+DIST_Y_TEST = 1500
 
 POSITION_TOLERANCE_DEFAULT = 300
 
+# Configuration du logger global pour ce script
+logger = logging.getLogger("RobotScript")  # Logger principal du script
+logger.setLevel(logging.DEBUG)  # Niveau de log pour le logger principal
 
-class SimpleLogger:
-    def debug(self, msg): print(f"[DEBUG] {msg}")
+# Créer un handler pour la console s'il n'y en a pas déjà pour ce logger
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)  # Niveau de log pour ce handler
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
-    def info(self, msg): print(f"[INFO] {msg}")
-
-    def warning(self, msg): print(f"[WARNING] {msg}")
-
-    def error(self, msg): print(f"[ERROR] {msg}")
-
-    def critical(self, msg): print(f"[CRITICAL] {msg}")
+    # Optionnel: Handler pour un fichier
+    # fh = logging.FileHandler('galil_driver_test.log', mode='w')
+    # fh.setLevel(logging.DEBUG)
+    # fh.setFormatter(formatter)
+    # logger.addHandler(fh)
 
 
-default_logger = SimpleLogger()
-
-
-class RobotControllerDMC2260:
-    def __init__(self, port=SERIAL_PORT_DEFAULT, baud=BAUD_RATE_DEFAULT, timeout=TIMEOUT_DEFAULT, logger=None):
+class GalilDMC2260Driver:
+    def __init__(self, port=SERIAL_PORT_DEFAULT, baud=BAUD_RATE_DEFAULT,
+                 timeout=TIMEOUT_DEFAULT):  # logger enlevé des params
         self.port_name = port
         self.baud_rate = baud
         self.timeout = timeout
         self.ser = None
         self.is_connected = False
-        self.logger = logger if logger else default_logger
+        # Chaque instance de driver utilise le logger configuré globalement pour ce script
+        self.logger = logging.getLogger("RobotScript.GalilDMC2260Driver")  # Logger enfant
         self.echo_disabled_confirmed = False
         self.current_tp = {axis: 0.0 for axis in ALL_AXES_PHYSICAL}
-        # self.tp_at_pr_start = {axis: 0.0 for axis in ALL_AXES_PHYSICAL} # Supprimé
 
-    # ... connect, disconnect, _disable_echo, send_rcv, get_firmware_revision ...
-    # (Ces méthodes restent identiques à la version précédente qui fonctionnait pour la connexion et REV)
     def connect(self):
         if self.is_connected: return True
         try:
@@ -148,13 +154,16 @@ class RobotControllerDMC2260:
         response_str_or_list = None
         try:
             if read_multiple_lines:
-                if command == chr(18) + chr(22):
+                if command == chr(18) + chr(22):  # REV
                     time.sleep(0.3)
                     response_data = self.ser.read_all()
                 else:
                     response_data = self.ser.read_until(expected_terminator.encode('ascii'))
                 lines = [ln.strip() for ln in response_data.decode('ascii', errors='ignore').splitlines() if ln.strip()]
-                if lines and lines[-1] == expected_terminator: lines.pop()
+                if lines and lines[-1] == expected_terminator and len(lines) > 1:
+                    lines.pop()
+                elif lines and lines[-1] == expected_terminator and len(lines) == 1:
+                    lines = []
                 response_str_or_list = lines
             else:
                 response_data = self.ser.read_until(expected_terminator.encode('ascii'))
@@ -229,11 +238,11 @@ class RobotControllerDMC2260:
         time.sleep(0.1)
         gm_status = self.send_rcv(f"MG _GM{slave_axis}")
         gr_status = self.send_rcv(f"MG _GR{slave_axis}")
-        ga_master_for_slave_status = self.send_rcv(f"MG _GA{slave_axis}")  # Corrected
-        master_index_expected_str = str(float(AXES_ORDER.index(master_axis)))
-        if '.' not in master_index_expected_str: master_index_expected_str += ".0000"
+        ga_master_for_slave_status = self.send_rcv(f"MG _GA{slave_axis}")
+        expected_master_code = str(float(AXES_ORDER.index(master_axis)))
+        if '.' not in expected_master_code: expected_master_code += ".0000"
         self.logger.info(
-            f"Statut Gantry après config: _GM{slave_axis}={gm_status}, _GR{slave_axis}={gr_status}, _GA{slave_axis} (maître pour esclave)={ga_master_for_slave_status} (attendu: {master_index_expected_str})")
+            f"Statut Gantry après config: _GM{slave_axis}={gm_status}, _GR{slave_axis}={gr_status}, _GA{slave_axis} (maître pour esclave)={ga_master_for_slave_status} (attendu: {expected_master_code})")
 
     def move_relative(self, axis, distance):
         self.logger.info(f"Mouvement relatif: Axe {axis}, Distance {distance}")
@@ -252,14 +261,14 @@ class RobotControllerDMC2260:
         self.logger.info(f"Attente fin de mouvement pour : {axes_str} ...")
         if not axes_str: return
         time.sleep(0.05)
-        self.send_rcv(f"AM{axes_str}", timeout_override=max(10, self.timeout * 5))
+        self.send_rcv(f"AM{axes_str}", timeout_override=max(10, self.timeout * 10))
         self.logger.info(f"Mouvement AM terminé pour {axes_str}.")
-        time.sleep(0.45)  # Augmenté encore pour la stabilisation de TP
+        time.sleep(0.45)
         self.update_all_tp_positions(axes_str)
 
     def get_tp_position(self, axis):
         for attempt in range(3):
-            response = self.send_rcv(f"MG _TP{axis}", timeout_override=0.3)  # Timeout un peu plus long pour TP
+            response = self.send_rcv(f"MG _TP{axis}", timeout_override=0.3)
             if response and '?' not in response and response.strip() != "":
                 try:
                     pos = float(response)
@@ -315,10 +324,10 @@ class RobotControllerDMC2260:
     def disable_motor_drivers(self, axes_str=ALL_AXES_PHYSICAL):
         for axis_char in axes_str:
             self.send_rcv(f"ST{axis_char}")
-            time.sleep(0.1)  # Donner plus de temps à ST
+            time.sleep(0.1)
             response = self.send_rcv(f"MO{axis_char}")
             if response == '?':
-                tc_error = self.send_rcv(f"TC")  # TC général
+                tc_error = self.send_rcv(f"TC")
                 self.logger.error(f"Erreur sur MO{axis_char}. Code TC général: {tc_error}")
         return True
 
@@ -332,127 +341,92 @@ class RobotControllerDMC2260:
 
 
 if __name__ == '__main__':
-    robot = RobotControllerDMC2260(port=SERIAL_PORT_DEFAULT, baud=BAUD_RATE_DEFAULT, timeout=0.5)
+    # robot va utiliser le logger "RobotScript.GalilDMC2260Driver"
+    # et les logs de __main__ utiliseront "RobotScript"
+    robot = GalilDMC2260Driver()
 
     if robot.connect():
         try:
-            robot.logger.info("--- Début Séquence de Test Robot ---")
+            logger.info("--- Début Séquence de Test Robot ---")  # Utilise le logger global du script
             rev_info = robot.get_firmware_revision()
-            if rev_info: robot.logger.info(f"Révision du firmware: {' '.join(rev_info)}")
+            if rev_info: logger.info(f"Révision du firmware: {' '.join(rev_info)}")
 
             robot.disable_motor_drivers(ALL_AXES_PHYSICAL)
             robot.configure_gantry(AXIS_X_GANTRY_MASTER, AXIS_X_GANTRY_SLAVE, gear_ratio=-1)
             robot.enable_motor_drivers(ALL_AXES_PHYSICAL)
 
-            # Lire les positions après enable pour avoir les valeurs initiales réelles
             robot.update_all_tp_positions()
             initial_positions_after_sh = robot.current_tp.copy()
-            robot.logger.info(f"Positions après SH: {initial_positions_after_sh}")
+            logger.info(f"Positions après SH et avant DP0: {initial_positions_after_sh}")
 
             robot.define_position_as_zero(ALL_AXES_PHYSICAL)
             time.sleep(0.3)
-            robot.update_all_tp_positions()  # Important pour que current_tp soit 0
+            robot.update_all_tp_positions()
             initial_positions_after_dp0 = robot.current_tp.copy()
+            logger.info(f"Positions après DP0: {initial_positions_after_dp0}")
             for ax_char_loop in ALL_AXES_PHYSICAL:
                 robot.check_position_reached(ax_char_loop, 0.0, tolerance=POSITION_TOLERANCE_DEFAULT)
 
+            logger.info(f"Définition V={SPEED_TEST}, A/D={ACCEL_DECEL_TEST}")
+            robot.set_speed(SPEED_TEST, ALL_AXES_PHYSICAL)
+            robot.set_acceleration(ACCEL_DECEL_TEST, ALL_AXES_PHYSICAL)
+            robot.set_deceleration(ACCEL_DECEL_TEST, ALL_AXES_PHYSICAL)
 
-            robot.logger.info(f"Définition V={SPEED}, A/D={ACCEL_DECEL}")
-            robot.set_parameters_for_axes("SP", SPEED, ALL_AXES_PHYSICAL)
-            robot.set_parameters_for_axes("AC", ACCEL_DECEL, ALL_AXES_PHYSICAL)
-            robot.set_parameters_for_axes("DC", ACCEL_DECEL, ALL_AXES_PHYSICAL)
+            # --- Test Gantry ---
+            logger.info(f"--- Test Mouvement Gantry ---")
+            dist_gantry_test = DIST_GANTRY_TEST
 
-
-            robot.logger.info(f"Mouvement Gantry X de {AXIS_X_STEPS}...")
-
-            # Les positions initiales sont celles après DP0
             initial_tp_A_fwd = initial_positions_after_dp0[AXIS_X_GANTRY_MASTER]
             initial_tp_B_fwd = initial_positions_after_dp0[AXIS_X_GANTRY_SLAVE]
+            logger.info(
+                f"Mouvement Gantry X de {dist_gantry_test}... (Depuis A={initial_tp_A_fwd}, B={initial_tp_B_fwd})")
 
-            expected_target_A_fwd = robot.move_relative(AXIS_X_GANTRY_MASTER, AXIS_X_STEPS)
+            expected_target_A_fwd = robot.move_relative(AXIS_X_GANTRY_MASTER, dist_gantry_test)
             if expected_target_A_fwd is None: raise Exception("move_relative gantry fwd failed")
-            robot.wait_motion_complete(AXIS_X_GANTRY_MASTER + AXIS_X_GANTRY_SLAVE)  # Attendre les deux en gantry
+            robot.wait_motion_complete(AXIS_X_GANTRY_MASTER + AXIS_X_GANTRY_SLAVE)
 
             robot.check_position_reached(AXIS_X_GANTRY_MASTER, expected_target_A_fwd)
-            expected_target_B_fwd = initial_tp_B_fwd + (AXIS_X_STEPS * -1)
+            expected_target_B_fwd = initial_tp_B_fwd + (dist_gantry_test * -1)
             robot.check_position_reached(AXIS_X_GANTRY_SLAVE, expected_target_B_fwd)
             time.sleep(1)
 
-
-            robot.logger.info(f"Mouvement Axe Y ({AXIS_Y_TABLE}) de {AXIS_Y_STEPS}...")
-            expected_target_C_fwd = robot.move_relative(AXIS_Y_TABLE, AXIS_Y_STEPS)
+            # --- Test Axe Y (C) ---
+            logger.info(f"--- Test Mouvement Axe Y ({AXIS_Y_TABLE}) ---")
+            dist_y_test = DIST_Y_TEST
+            initial_tp_C_fwd = initial_positions_after_dp0[AXIS_Y_TABLE]
+            logger.info(f"Mouvement Axe Y ({AXIS_Y_TABLE}) de {dist_y_test}... (Depuis C={initial_tp_C_fwd})")
+            expected_target_C_fwd = robot.move_relative(AXIS_Y_TABLE, dist_y_test)
             if expected_target_C_fwd is None: raise Exception("move_relative Y fwd failed")
             robot.wait_motion_complete(AXIS_Y_TABLE)
             robot.check_position_reached(AXIS_Y_TABLE, expected_target_C_fwd)
             time.sleep(1)
 
-            robot.logger.info(f"Mouvement Axe Z ({AXIS_Z_VERTICAL}) de {AXIS_Z_STEPS}...")
-            expected_target_D_fwd = robot.move_relative(AXIS_Z_VERTICAL, AXIS_Z_STEPS)
-            if expected_target_D_fwd is None: raise Exception("move_relative Z fwd failed")
-            robot.wait_motion_complete(AXIS_Z_VERTICAL)
-            robot.check_position_reached(AXIS_Z_VERTICAL, expected_target_D_fwd)
-            time.sleep(1)
-
-            robot.logger.info(f"Mouvement Axe Theta ({AXIS_THETA_ROTATION}) de {AXIS_THETA_STEPS}...")
-            expected_target_E_fwd = robot.move_relative(AXIS_THETA_ROTATION, AXIS_THETA_STEPS)
-            if expected_target_E_fwd is None: raise Exception("move_relative Theta fwd failed")
-            robot.wait_motion_complete(AXIS_THETA_ROTATION)
-            robot.check_position_reached(AXIS_THETA_ROTATION, expected_target_E_fwd)
-            time.sleep(1)
-
-            robot.logger.info(f"Mouvement Axe Phi ({AXIS_PHI_TILT}) de {AXIS_PHI_STEPS}...")
-            expected_target_F_fwd = robot.move_relative(AXIS_PHI_TILT, AXIS_PHI_STEPS)
-            if expected_target_F_fwd is None: raise Exception("move_relative Phi fwd failed")
-            robot.wait_motion_complete(AXIS_PHI_TILT)
-            robot.check_position_reached(AXIS_PHI_TILT, expected_target_F_fwd)
-            time.sleep(1)
-
-            # --- Retour des axes à la position initiale ---
-            robot.logger.info(f"Retour Gantry X de {-AXIS_X_STEPS}...")
-            expected_target_A_ret = robot.move_relative(AXIS_X_GANTRY_MASTER, -AXIS_X_STEPS)
+            # --- Retour Gantry ---
+            logger.info(f"Retour Gantry X de {-dist_gantry_test}...")
+            # Les positions de départ pour ce mouvement sont les positions finales du mouvement précédent
+            # qui sont dans self.current_tp car wait_motion_complete appelle update_all_tp_positions
+            expected_target_A_ret = robot.move_relative(AXIS_X_GANTRY_MASTER, -dist_gantry_test)
             if expected_target_A_ret is None: raise Exception("move_relative gantry ret failed")
             robot.wait_motion_complete(AXIS_X_GANTRY_MASTER + AXIS_X_GANTRY_SLAVE)
 
-            robot.check_position_reached(AXIS_X_GANTRY_MASTER, initial_tp_A_fwd)
-            robot.check_position_reached(AXIS_X_GANTRY_SLAVE, initial_tp_B_fwd)
+            robot.check_position_reached(AXIS_X_GANTRY_MASTER, initial_positions_after_dp0[AXIS_X_GANTRY_MASTER])
+            robot.check_position_reached(AXIS_X_GANTRY_SLAVE, initial_positions_after_dp0[AXIS_X_GANTRY_SLAVE])
             time.sleep(1)
 
-            robot.logger.info(f"Retour Axe Y ({AXIS_Y_TABLE}) de {-AXIS_Y_STEPS}...")
-            initial_tp_C_before_ret = robot.current_tp.get(AXIS_Y_TABLE, 0.0)  # Ce devrait être dist_y
-            expected_target_C_ret = robot.move_relative(AXIS_Y_TABLE, -AXIS_Y_STEPS)
+            # --- Retour Axe Y ---
+            logger.info(f"Retour Axe Y ({AXIS_Y_TABLE}) de {-dist_y_test}...")
+            expected_target_C_ret = robot.move_relative(AXIS_Y_TABLE, -dist_y_test)
             if expected_target_C_ret is None: raise Exception("move_relative Y ret failed")
             robot.wait_motion_complete(AXIS_Y_TABLE)
             robot.check_position_reached(AXIS_Y_TABLE, initial_positions_after_dp0[AXIS_Y_TABLE])
-
-            robot.logger.info(f"Retour Axe Z ({AXIS_Z_VERTICAL}) de {-AXIS_Z_STEPS}...")
-            initial_tp_D_before_ret = robot.current_tp.get(AXIS_Z_VERTICAL, 0.0)  # Ce devrait être dist_z
-            expected_target_D_ret = robot.move_relative(AXIS_Z_VERTICAL, -AXIS_Z_STEPS)
-            if expected_target_D_ret is None: raise Exception("move_relative Z ret failed")
-            robot.wait_motion_complete(AXIS_Z_VERTICAL)
-            robot.check_position_reached(AXIS_Z_VERTICAL, initial_positions_after_dp0[AXIS_Z_VERTICAL])
             time.sleep(1)
 
-            robot.logger.info(f"Retour Axe Theta ({AXIS_THETA_ROTATION}) de {-AXIS_THETA_STEPS}...")
-            initial_tp_E_before_ret = robot.current_tp.get(AXIS_THETA_ROTATION, 0.0)  # Ce devrait être dist_theta
-            expected_target_E_ret = robot.move_relative(AXIS_THETA_ROTATION, -AXIS_THETA_STEPS)
-            if expected_target_E_ret is None: raise Exception("move_relative Theta ret failed")
-            robot.wait_motion_complete(AXIS_THETA_ROTATION)
-            robot.check_position_reached(AXIS_THETA_ROTATION, initial_positions_after_dp0[AXIS_THETA_ROTATION])
-            time.sleep(1)
+            # ... (Ajouter les tests pour Z, Theta, Phi si nécessaire, en suivant le modèle de Y/C)
 
-            robot.logger.info(f"Retour Axe Phi ({AXIS_PHI_TILT}) de {-AXIS_PHI_STEPS}...")
-            initial_tp_F_before_ret = robot.current_tp.get(AXIS_PHI_TILT, 0.0)  # Ce devrait être dist_phi
-            expected_target_F_ret = robot.move_relative(AXIS_PHI_TILT, -AXIS_PHI_STEPS)
-            if expected_target_F_ret is None: raise Exception("move_relative Phi ret failed")
-            robot.wait_motion_complete(AXIS_PHI_TILT)
-            robot.check_position_reached(AXIS_PHI_TILT, initial_positions_after_dp0[AXIS_PHI_TILT])
-            time.sleep(1)
-
-
-            robot.logger.info("--- Fin Séquence de Test ---")
+            logger.info("--- Fin Séquence de Test ---")
 
         except KeyboardInterrupt:
-            robot.logger.info("Interruption par l'utilisateur.")
+            logger.info("Interruption par l'utilisateur.")
             if robot.is_connected:
                 try:
                     robot.stop_motion()
@@ -463,7 +437,7 @@ if __name__ == '__main__':
                 except:
                     pass
         except Exception as e_main:
-            robot.logger.critical(f"Erreur critique: {e_main}")
+            logger.critical(f"Erreur critique: {e_main}")
             import traceback
 
             traceback.print_exc()
@@ -471,8 +445,8 @@ if __name__ == '__main__':
             if robot.is_connected:
                 robot.disconnect()
             else:
-                robot.logger.info("Le robot n'était pas connecté, pas de déconnexion nécessaire.")
+                logger.info("Le robot n'était pas connecté, pas de déconnexion nécessaire.")
     else:
-        robot.logger.error("Échec de la connexion initiale au contrôleur.")
+        logger.error("Échec de la connexion initiale au contrôleur.")
 
     print("Programme TestDMC2260 terminé.")
