@@ -21,6 +21,16 @@ AXIS_PHI_TILT = 'F'
 ALL_AXES_PHYSICAL = "ABCDEF"
 AXES_ORDER = ['A', 'B', 'C', 'D', 'E', 'F']
 
+# --- Constantes de Déplacement ---
+AXIS_X_STEPS =  -543000 # 542873 steps = 1m
+AXIS_Y_STEPS =  -543000 # 543000 steps = 1m
+AXIS_Z_STEPS =  -360120
+AXIS_THETA_STEPS =  82000 # 82000 steps = 360°
+AXIS_PHI_STEPS =  25500 # 25500 steps = 360°
+
+SPEED = 20000
+ACCEL_DECEL = 15000
+
 POSITION_TOLERANCE_DEFAULT = 300
 
 
@@ -346,39 +356,60 @@ if __name__ == '__main__':
             for ax_char_loop in ALL_AXES_PHYSICAL:
                 robot.check_position_reached(ax_char_loop, 0.0, tolerance=POSITION_TOLERANCE_DEFAULT)
 
-            SPEED = 5000
-            ACCEL_DECEL = 50000
+
             robot.logger.info(f"Définition V={SPEED}, A/D={ACCEL_DECEL}")
             robot.set_parameters_for_axes("SP", SPEED, ALL_AXES_PHYSICAL)
             robot.set_parameters_for_axes("AC", ACCEL_DECEL, ALL_AXES_PHYSICAL)
             robot.set_parameters_for_axes("DC", ACCEL_DECEL, ALL_AXES_PHYSICAL)
 
-            dist_gantry = 10000
-            robot.logger.info(f"Mouvement Gantry X de {dist_gantry}...")
+
+            robot.logger.info(f"Mouvement Gantry X de {AXIS_X_STEPS}...")
 
             # Les positions initiales sont celles après DP0
             initial_tp_A_fwd = initial_positions_after_dp0[AXIS_X_GANTRY_MASTER]
             initial_tp_B_fwd = initial_positions_after_dp0[AXIS_X_GANTRY_SLAVE]
 
-            expected_target_A_fwd = robot.move_relative(AXIS_X_GANTRY_MASTER, dist_gantry)
+            expected_target_A_fwd = robot.move_relative(AXIS_X_GANTRY_MASTER, AXIS_X_STEPS)
             if expected_target_A_fwd is None: raise Exception("move_relative gantry fwd failed")
             robot.wait_motion_complete(AXIS_X_GANTRY_MASTER + AXIS_X_GANTRY_SLAVE)  # Attendre les deux en gantry
 
             robot.check_position_reached(AXIS_X_GANTRY_MASTER, expected_target_A_fwd)
-            expected_target_B_fwd = initial_tp_B_fwd + (dist_gantry * -1)
+            expected_target_B_fwd = initial_tp_B_fwd + (AXIS_X_STEPS * -1)
             robot.check_position_reached(AXIS_X_GANTRY_SLAVE, expected_target_B_fwd)
             time.sleep(1)
 
-            dist_y = 1500
-            robot.logger.info(f"Mouvement Axe Y ({AXIS_Y_TABLE}) de {dist_y}...")
-            expected_target_C_fwd = robot.move_relative(AXIS_Y_TABLE, dist_y)
+
+            robot.logger.info(f"Mouvement Axe Y ({AXIS_Y_TABLE}) de {AXIS_Y_STEPS}...")
+            expected_target_C_fwd = robot.move_relative(AXIS_Y_TABLE, AXIS_Y_STEPS)
             if expected_target_C_fwd is None: raise Exception("move_relative Y fwd failed")
             robot.wait_motion_complete(AXIS_Y_TABLE)
             robot.check_position_reached(AXIS_Y_TABLE, expected_target_C_fwd)
             time.sleep(1)
 
-            robot.logger.info(f"Retour Gantry X de {-dist_gantry}...")
-            expected_target_A_ret = robot.move_relative(AXIS_X_GANTRY_MASTER, -dist_gantry)
+            robot.logger.info(f"Mouvement Axe Z ({AXIS_Z_VERTICAL}) de {AXIS_Z_STEPS}...")
+            expected_target_D_fwd = robot.move_relative(AXIS_Z_VERTICAL, AXIS_Z_STEPS)
+            if expected_target_D_fwd is None: raise Exception("move_relative Z fwd failed")
+            robot.wait_motion_complete(AXIS_Z_VERTICAL)
+            robot.check_position_reached(AXIS_Z_VERTICAL, expected_target_D_fwd)
+            time.sleep(1)
+
+            robot.logger.info(f"Mouvement Axe Theta ({AXIS_THETA_ROTATION}) de {AXIS_THETA_STEPS}...")
+            expected_target_E_fwd = robot.move_relative(AXIS_THETA_ROTATION, AXIS_THETA_STEPS)
+            if expected_target_E_fwd is None: raise Exception("move_relative Theta fwd failed")
+            robot.wait_motion_complete(AXIS_THETA_ROTATION)
+            robot.check_position_reached(AXIS_THETA_ROTATION, expected_target_E_fwd)
+            time.sleep(1)
+
+            robot.logger.info(f"Mouvement Axe Phi ({AXIS_PHI_TILT}) de {AXIS_PHI_STEPS}...")
+            expected_target_F_fwd = robot.move_relative(AXIS_PHI_TILT, AXIS_PHI_STEPS)
+            if expected_target_F_fwd is None: raise Exception("move_relative Phi fwd failed")
+            robot.wait_motion_complete(AXIS_PHI_TILT)
+            robot.check_position_reached(AXIS_PHI_TILT, expected_target_F_fwd)
+            time.sleep(1)
+
+            # --- Retour des axes à la position initiale ---
+            robot.logger.info(f"Retour Gantry X de {-AXIS_X_STEPS}...")
+            expected_target_A_ret = robot.move_relative(AXIS_X_GANTRY_MASTER, -AXIS_X_STEPS)
             if expected_target_A_ret is None: raise Exception("move_relative gantry ret failed")
             robot.wait_motion_complete(AXIS_X_GANTRY_MASTER + AXIS_X_GANTRY_SLAVE)
 
@@ -386,12 +417,37 @@ if __name__ == '__main__':
             robot.check_position_reached(AXIS_X_GANTRY_SLAVE, initial_tp_B_fwd)
             time.sleep(1)
 
-            robot.logger.info(f"Retour Axe Y ({AXIS_Y_TABLE}) de {-dist_y}...")
+            robot.logger.info(f"Retour Axe Y ({AXIS_Y_TABLE}) de {-AXIS_Y_STEPS}...")
             initial_tp_C_before_ret = robot.current_tp.get(AXIS_Y_TABLE, 0.0)  # Ce devrait être dist_y
-            expected_target_C_ret = robot.move_relative(AXIS_Y_TABLE, -dist_y)
+            expected_target_C_ret = robot.move_relative(AXIS_Y_TABLE, -AXIS_Y_STEPS)
             if expected_target_C_ret is None: raise Exception("move_relative Y ret failed")
             robot.wait_motion_complete(AXIS_Y_TABLE)
             robot.check_position_reached(AXIS_Y_TABLE, initial_positions_after_dp0[AXIS_Y_TABLE])
+
+            robot.logger.info(f"Retour Axe Z ({AXIS_Z_VERTICAL}) de {-AXIS_Z_STEPS}...")
+            initial_tp_D_before_ret = robot.current_tp.get(AXIS_Z_VERTICAL, 0.0)  # Ce devrait être dist_z
+            expected_target_D_ret = robot.move_relative(AXIS_Z_VERTICAL, -AXIS_Z_STEPS)
+            if expected_target_D_ret is None: raise Exception("move_relative Z ret failed")
+            robot.wait_motion_complete(AXIS_Z_VERTICAL)
+            robot.check_position_reached(AXIS_Z_VERTICAL, initial_positions_after_dp0[AXIS_Z_VERTICAL])
+            time.sleep(1)
+
+            robot.logger.info(f"Retour Axe Theta ({AXIS_THETA_ROTATION}) de {-AXIS_THETA_STEPS}...")
+            initial_tp_E_before_ret = robot.current_tp.get(AXIS_THETA_ROTATION, 0.0)  # Ce devrait être dist_theta
+            expected_target_E_ret = robot.move_relative(AXIS_THETA_ROTATION, -AXIS_THETA_STEPS)
+            if expected_target_E_ret is None: raise Exception("move_relative Theta ret failed")
+            robot.wait_motion_complete(AXIS_THETA_ROTATION)
+            robot.check_position_reached(AXIS_THETA_ROTATION, initial_positions_after_dp0[AXIS_THETA_ROTATION])
+            time.sleep(1)
+
+            robot.logger.info(f"Retour Axe Phi ({AXIS_PHI_TILT}) de {-AXIS_PHI_STEPS}...")
+            initial_tp_F_before_ret = robot.current_tp.get(AXIS_PHI_TILT, 0.0)  # Ce devrait être dist_phi
+            expected_target_F_ret = robot.move_relative(AXIS_PHI_TILT, -AXIS_PHI_STEPS)
+            if expected_target_F_ret is None: raise Exception("move_relative Phi ret failed")
+            robot.wait_motion_complete(AXIS_PHI_TILT)
+            robot.check_position_reached(AXIS_PHI_TILT, initial_positions_after_dp0[AXIS_PHI_TILT])
+            time.sleep(1)
+
 
             robot.logger.info("--- Fin Séquence de Test ---")
 
