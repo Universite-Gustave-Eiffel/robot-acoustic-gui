@@ -115,6 +115,8 @@ class MainWindow(QMainWindow):
                          "Démarrer la mesure")
         self._add_action('save_measurement', 'save_measurement.png', 'Enregistrer mesure',
                          "Enregistrer la mesure")
+        self._add_action('log_pulse', 'log_pulse.png', 'Log Pulse',
+                         "Voir les logs de Pulse", 'Ctrl+P')
 
         # Actions Robot
         self._add_action('stop_robot', 'stop.png', 'Arrêter robot',
@@ -125,6 +127,8 @@ class MainWindow(QMainWindow):
                          "Aller au zéro")
         self._add_action('goto_selected', 'goto_point.png', 'Position sélectionnée',
                          "Aller à la position sélectionnée")
+        self._add_action('log_robot', 'log_robot.png', 'Log Robot',
+                         "Voir les logs du robot", 'Ctrl+R')
 
         # Actions Édition de la liste de points
         self._add_action('delete_point', 'minus.png', 'Supprimer un point',
@@ -185,6 +189,7 @@ class MainWindow(QMainWindow):
             lambda: self._on_action("Démarrer Mesure"))
         self._actions['save_measurement'].triggered.connect(
             lambda: self._on_action("Enregistrer Mesure"))
+        self._actions['log_pulse'].triggered.connect(lambda: self._on_action("Voir les Logs de Pulse"))
 
         # Robot
         self._actions['stop_robot'].triggered.connect(lambda: self._on_action("Arrêter Robot"))
@@ -193,6 +198,8 @@ class MainWindow(QMainWindow):
         self._actions['goto_zero'].triggered.connect(lambda: self._on_action("Aller au Zéro"))
         self._actions['goto_selected'].triggered.connect(
             lambda: self._on_action("Aller à la Position Sélectionnée"))
+        self._actions['log_robot'].triggered.connect(lambda: self._on_action("Voir les Logs du Robot"))
+
 
         # Point list edition
         self._actions['delete_point'].triggered.connect(lambda: self._on_action("Supprimer un Point"))
@@ -258,6 +265,7 @@ class MainWindow(QMainWindow):
         toolbar_pulse.addSeparator()
         toolbar_pulse.addWidget(QLineEdit("Fichier_mesure.txt"))
         toolbar_pulse.addAction(self._actions['save_measurement'])
+        toolbar_pulse.addAction(self._actions['log_pulse'])
 
         # Toolbar Robot (nouvelle rangée)
         toolbar_robot = QToolBar("Outils Robot")
@@ -269,6 +277,7 @@ class MainWindow(QMainWindow):
         toolbar_robot.addAction(self._actions['goto_parking'])
         toolbar_robot.addAction(self._actions['goto_zero'])
         toolbar_robot.addAction(self._actions['goto_selected'])
+        toolbar_robot.addAction(self._actions['log_robot'])
 
 
         # Toolbar Édition (barre verticale à gauche)
