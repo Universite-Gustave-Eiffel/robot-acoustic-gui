@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QToolBar,
     QStatusBar, QMessageBox, QLineEdit, QMenu, QGridLayout, QFrame, QSplitter, QListWidget, QSizePolicy, QFormLayout,
-    QSpinBox, QHBoxLayout, QTableWidget, QHeaderView, QTableWidgetItem
+    QSpinBox, QHBoxLayout, QTableWidget, QHeaderView, QTableWidgetItem, QPushButton
 )
 from PySide6.QtGui import QIcon, QFont, QAction, QCloseEvent
 from PySide6.QtCore import Qt, QSize, Slot, Signal
@@ -35,6 +35,238 @@ class ResourceManager:
         return cls.ICONS_DIR.is_dir()
 
 
+class TelecommandeWindow(QMainWindow):
+    """Fenêtre de télécommande pour contrôler le robot manuellement."""
+
+    def __init__(self, parent=None):
+        """Initialise la fenêtre de télécommande."""
+        super().__init__(parent)
+        self.setWindowTitle('Télécommande du robot')
+        self.setWindowIcon(QIcon(ResourceManager.get_icon_path('joystick.png')))
+        self.setGeometry(200, 200, 650, 400)  # Taille ajustée
+        self.setMinimumSize(600, 550)
+
+        self._actions = {}
+        self._create_actions()
+        self._create_toolbars()
+        self._create_menus()
+
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        main_layout = QGridLayout(central_widget)
+        main_layout.setSpacing(10)
+
+        # Création des différents panneaux
+        position_panel = self._create_position_display_panel()
+        absolute_panel = self._create_absolute_control_panel()
+        relative_panel = self._create_relative_control_panel()
+        store_panel = self._create_store_point_panel()
+
+        # Ajout des panneaux à la grille principale
+        main_layout.addWidget(position_panel, 0, 0, 1, 2)  # S'étend sur 2 colonnes
+        main_layout.addWidget(absolute_panel, 1, 0)
+        main_layout.addWidget(relative_panel, 1, 1)
+        main_layout.addWidget(store_panel, 2, 0, 1, 2)  # S'étend sur 2 colonnes
+
+        # Rendre les colonnes redimensionnables de manière équilibrée
+        main_layout.setColumnStretch(0, 1)
+        main_layout.setColumnStretch(1, 1)
+
+    def _create_frame_with_title(self, title_text: str) -> (QFrame, QVBoxLayout):
+        """Crée un cadre avec un titre pour regrouper les widgets."""
+        frame = QFrame()
+        frame.setFrameShape(QFrame.StyledPanel)
+        frame.setFrameShadow(QFrame.Raised)
+
+        layout = QVBoxLayout(frame)
+        title_label = QLabel(title_text)
+        title_label.setStyleSheet("font-weight: bold; font-size: 14px; margin-bottom: 5px;")
+        layout.addWidget(title_label)
+
+        return frame, layout
+
+    def _create_position_display_panel(self) -> QWidget:
+        """Crée le panneau d'affichage des positions actuelles."""
+        frame, layout = self._create_frame_with_title("Position Actuelle")
+
+        grid = QGridLayout()
+        layout.addLayout(grid)
+
+        # Entêtes de colonnes
+        headers = ["", "X (mm)", "Y (mm)", "Z (mm)", "Theta (°)", "Phi (°)"]
+        for i, header_text in enumerate(headers):
+            grid.addWidget(QLabel(f"<b>{header_text}</b>"), 0, i)
+
+        # Ligne Position Robot
+        grid.addWidget(QLabel("<b>Robot:</b>"), 1, 0)
+        self.pos_robot_x = QLineEdit("0.00")
+        self.pos_robot_x.setReadOnly(True)
+        self.pos_robot_x.setMaximumWidth(80)
+        self.pos_robot_y = QLineEdit("0.00")
+        self.pos_robot_y.setReadOnly(True)
+        self.pos_robot_y.setMaximumWidth(80)
+        self.pos_robot_z = QLineEdit("0.00")
+        self.pos_robot_z.setReadOnly(True)
+        self.pos_robot_z.setMaximumWidth(80)
+        self.pos_robot_theta = QLineEdit("0.00")
+        self.pos_robot_theta.setReadOnly(True)
+        self.pos_robot_theta.setMaximumWidth(80)
+        self.pos_robot_phi = QLineEdit("0.00")
+        self.pos_robot_phi.setReadOnly(True)
+        self.pos_robot_phi.setMaximumWidth(80)
+
+        grid.addWidget(self.pos_robot_x, 1, 1)
+        grid.addWidget(self.pos_robot_y, 1, 2)
+        grid.addWidget(self.pos_robot_z, 1, 3)
+        grid.addWidget(self.pos_robot_theta, 1, 4)
+        grid.addWidget(self.pos_robot_phi, 1, 5)
+
+        # Ligne Position Capsule (corrigée)
+        grid.addWidget(QLabel("<b>Capsule:</b>"), 2, 0)
+        self.pos_capsule_x = QLineEdit("0.00")
+        self.pos_capsule_x.setReadOnly(True)
+        self.pos_capsule_x.setMaximumWidth(80)
+        self.pos_capsule_y = QLineEdit("0.00")
+        self.pos_capsule_y.setReadOnly(True)
+        self.pos_capsule_y.setMaximumWidth(80)
+        self.pos_capsule_z = QLineEdit("0.00")
+        self.pos_capsule_z.setReadOnly(True)
+        self.pos_capsule_z.setMaximumWidth(80)
+
+        grid.addWidget(self.pos_capsule_x, 2, 1)
+        grid.addWidget(self.pos_capsule_y, 2, 2)
+        grid.addWidget(self.pos_capsule_z, 2, 3)
+
+        # Ajouter une colonne "stretch" pour pousser tout vers la gauche
+        grid.setColumnStretch(6, 1)
+
+        return frame
+
+    def _create_absolute_control_panel(self) -> QWidget:
+        """Crée le panneau pour les déplacements absolus."""
+        frame, main_frame_layout = self._create_frame_with_title("Déplacements Absolus")
+
+        # Layout principal du panneau : horizontal
+        h_layout = QHBoxLayout()
+        main_frame_layout.addLayout(h_layout)
+
+        # Partie gauche : les champs de saisie
+        form_layout = QFormLayout()
+        self.target_x = QLineEdit("0")
+        form_layout.addRow("X:", self.target_x)
+        self.target_y = QLineEdit("0")
+        form_layout.addRow("Y:", self.target_y)
+        self.target_z = QLineEdit("0")
+        form_layout.addRow("Z:", self.target_z)
+        self.target_theta = QLineEdit("0")
+        form_layout.addRow("Theta:", self.target_theta)
+        self.target_phi = QLineEdit("0")
+        form_layout.addRow("Phi:", self.target_phi)
+
+        # Partie droite : les boutons d'action
+        buttons_layout = QVBoxLayout()
+        btn_copy_pos = QPushButton(QIcon(ResourceManager.get_icon_path("arrow_down.png")), " Copier Pos. Actuelle")
+        btn_go = QPushButton(QIcon(ResourceManager.get_icon_path("goto_point.png")), " Aller à la position")
+        btn_go.setStyleSheet("font-weight: bold;")
+
+        buttons_layout.addWidget(btn_copy_pos)
+        buttons_layout.addWidget(btn_go)
+        buttons_layout.addStretch()  # Pousse les boutons vers le haut
+
+        h_layout.addLayout(form_layout)
+        h_layout.addLayout(buttons_layout)
+
+        return frame
+
+    def _create_relative_control_panel(self) -> QWidget:
+        """Crée le panneau pour les déplacements relatifs."""
+        frame, layout = self._create_frame_with_title("Déplacements Relatifs (pas-à-pas)")
+
+        grid = QGridLayout()
+        layout.addLayout(grid)
+
+        axes = ["X", "Y", "Z", "Theta", "Phi"]
+        for i, axis in enumerate(axes):
+            label = QLabel(f"<b>{axis}:</b>")
+            btn_minus = QPushButton(f"-")
+            btn_minus.setFixedWidth(30)
+            spin_box = QSpinBox()
+            spin_box.setRange(1, 1000)
+            spin_box.setValue(10)
+            spin_box.setMaximumWidth(70)
+            btn_plus = QPushButton(f"+")
+            btn_plus.setFixedWidth(30)
+
+            grid.addWidget(label, i, 0)
+            grid.addWidget(btn_minus, i, 1)
+            grid.addWidget(spin_box, i, 2)
+            grid.addWidget(btn_plus, i, 3)
+
+        # Pousser les widgets vers la gauche
+        grid.setColumnStretch(4, 1)
+
+        return frame
+
+    def _create_store_point_panel(self) -> QWidget:
+        """Crée le panneau pour stocker un point de mesure."""
+        frame, layout = self._create_frame_with_title("Ajouter un point à la liste")
+
+        form_layout = QFormLayout()
+        layout.addLayout(form_layout)
+
+        self.mesure_name = QLineEdit("Mesure_A")
+        self.mesure_count = QSpinBox()
+        self.mesure_count.setRange(1, 100)
+        self.mesure_count.setValue(1)
+
+        btn_store = QPushButton(QIcon(ResourceManager.get_icon_path("add.png")), " Stocker le point dans la liste")
+
+        form_layout.addRow("Nom de la mesure:", self.mesure_name)
+        form_layout.addRow("Nombre de mesures:", self.mesure_count)
+        layout.addWidget(btn_store)
+
+        return frame
+
+    def _create_actions(self) -> None:
+        """Crée les actions spécifiques à la télécommande."""
+        self._add_action('set_zero', 'set_zero.png', 'Définition du ZERO', "Définir la position actuelle comme origine")
+        self._add_action('set_parking', 'parking.png', 'Définition du Parking',
+                         "Définir la position actuelle comme parking")
+        self._add_action('set_position', 'set_position.png', "Définition d'une position",
+                         "Recaler le système à la position actuelle")
+        self._add_action('stop_robot', 'stop.png', 'Arrêt Urgence', "Arrêter immédiatement tous les moteurs")
+
+    def _add_action(self, name: str, icon_file: str, text: str, status_tip: str) -> None:
+        """Ajoute une action."""
+        action = QAction(QIcon(ResourceManager.get_icon_path(icon_file)), text, self)
+        action.setStatusTip(status_tip)
+        self._actions[name] = action
+
+    def _create_menus(self) -> None:
+        """Crée la barre de menu."""
+        menu_bar = self.menuBar()
+        menu_ref = menu_bar.addMenu("&Points de Références")
+        menu_ref.addAction(self._actions['set_zero'])
+        menu_ref.addAction(self._actions['set_parking'])
+        menu_ref.addSeparator()
+        menu_ref.addAction(self._actions['set_position'])
+
+    def _create_toolbars(self) -> None:
+        """Crée la barre d'outils d'urgence."""
+        toolbar = QToolBar("Urgence")
+        toolbar.setIconSize(QSize(24, 24))
+        self.addToolBar(toolbar)
+
+        stop_action = self._actions['stop_robot']
+        stop_button = QPushButton(stop_action.icon(), stop_action.text())
+        stop_button.setStyleSheet("background-color: #D32F2F; color: white; font-weight: bold; padding: 4px;")
+        stop_button.setToolTip(stop_action.statusTip())
+        stop_button.clicked.connect(lambda: print("Arrêt d'urgence !"))
+
+        toolbar.addWidget(stop_button)
+
+
 class MainWindow(QMainWindow):
     """Fenêtre principale de l'application de pilotage du robot."""
 
@@ -44,6 +276,7 @@ class MainWindow(QMainWindow):
 
         # Attributs internes
         self._actions: Dict[str, QAction] = {}
+        self.telecommande_window: Optional[TelecommandeWindow] = None
 
         # Configuration de la fenêtre
         self.setWindowTitle('Pilotage du robot')
@@ -115,7 +348,7 @@ class MainWindow(QMainWindow):
                          "Démarrer la mesure")
         self._add_action('save_measurement', 'save_measurement.png', 'Enregistrer mesure',
                          "Enregistrer la mesure")
-        self._add_action('log_pulse', 'log_pulse.png', 'Log Pulse',
+        self._add_action('log_pulse', 'log_pulse_5.png', 'Log Pulse',
                          "Voir les logs de Pulse", 'Ctrl+P')
 
         # Actions Robot
@@ -143,7 +376,6 @@ class MainWindow(QMainWindow):
         # Connexion des signaux
         self._connect_action_signals()
 
-
     def _add_action(self, name: str, icon_file: str, text: str, status_tip: str, shortcut: str = None) -> None:
         """Ajoute une action à la collection d'actions."""
         action = QAction(QIcon(ResourceManager.get_icon_path(icon_file)), text, self)
@@ -169,8 +401,7 @@ class MainWindow(QMainWindow):
         # Outils
         self._actions['measurement_settings'].triggered.connect(
             lambda: self._on_action("Options Mesures"))
-        self._actions['telecommande'].triggered.connect(
-            lambda: self._on_action("Télécommande"))
+        self._actions['telecommande'].triggered.connect(self._open_telecommande)
 
         # Aide
         self._actions['apropos'].triggered.connect(self._on_about)
@@ -200,7 +431,6 @@ class MainWindow(QMainWindow):
             lambda: self._on_action("Aller à la Position Sélectionnée"))
         self._actions['log_robot'].triggered.connect(lambda: self._on_action("Voir les Logs du Robot"))
 
-
         # Point list edition
         self._actions['delete_point'].triggered.connect(lambda: self._on_action("Supprimer un Point"))
         self._actions['add_point'].triggered.connect(lambda: self._on_action("Ajouter un Point"))
@@ -212,7 +442,16 @@ class MainWindow(QMainWindow):
         self._actions['move_point_up'].triggered.connect(self._move_point_up)
         self._actions['move_point_down'].triggered.connect(self._move_point_down)
 
-
+    def _open_telecommande(self):
+        """Ouvre la fenêtre de télécommande."""
+        # Crée une seule instance ou la ramène au premier plan si elle existe déjà
+        if self.telecommande_window is None or not self.telecommande_window.isVisible():
+            self.telecommande_window = TelecommandeWindow()
+            self.telecommande_window.show()
+            self.statusBar().showMessage("Télécommande ouverte", 3000)
+        else:
+            self.telecommande_window.activateWindow()
+            self.telecommande_window.raise_()
 
     def _create_menus(self) -> None:
         """Crée la barre de menu et les menus."""
@@ -278,7 +517,6 @@ class MainWindow(QMainWindow):
         toolbar_robot.addAction(self._actions['goto_zero'])
         toolbar_robot.addAction(self._actions['goto_selected'])
         toolbar_robot.addAction(self._actions['log_robot'])
-
 
         # Toolbar Édition (barre verticale à gauche)
         toolbar_edition = QToolBar("Outils Édition")
@@ -452,7 +690,7 @@ class MainWindow(QMainWindow):
         coord_widget = QWidget()
         coord_layout = QHBoxLayout(coord_widget)
         coord_layout.setContentsMargins(5, 0, 5, 0)
-        coord_layout.setSpacing(30) # Espacement entre les éléments X:50mm---Y:100mm etc
+        coord_layout.setSpacing(30)  # Espacement entre les éléments X:50mm---Y:100mm etc
 
         # Labels pour chaque coordonnée avec politiques de taille
         self.coord_values = {}
@@ -460,7 +698,7 @@ class MainWindow(QMainWindow):
             coord_container = QWidget()
             container_layout = QHBoxLayout(coord_container)
             container_layout.setContentsMargins(0, 0, 0, 0)
-            container_layout.setSpacing(2) # Espacement entre les éléments X:---50---mm etc
+            container_layout.setSpacing(2)  # Espacement entre les éléments X:---50---mm etc
 
             # Label avec le nom de la coordonnée
             label = QLabel(f"{coord}:")
@@ -526,6 +764,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Gère l'événement de fermeture de la fenêtre."""
+        if self.telecommande_window and self.telecommande_window.isVisible():
+            self.telecommande_window.close()
+
         reponse = QMessageBox.question(
             self, 'Confirmation', "Quitter l'application ?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
