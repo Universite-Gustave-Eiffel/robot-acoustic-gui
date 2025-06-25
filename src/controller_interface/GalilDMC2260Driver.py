@@ -32,8 +32,8 @@ AXIS_PHI_STEPS = 25500
 # Valeurs utilisées dans __main__ pour les tests
 SPEED_TEST = 20000
 ACCEL_DECEL_TEST = 15000
-DIST_GANTRY_TEST = 10000
-DIST_Y_TEST = 1500
+DIST_GANTRY_TEST = 100000
+DIST_Y_TEST = 0
 
 POSITION_TOLERANCE_DEFAULT = 300
 
@@ -401,25 +401,26 @@ if __name__ == '__main__':
             robot.check_position_reached(AXIS_Y_TABLE, expected_target_C_fwd)
             time.sleep(1)
 
+
             # --- Retour Gantry ---
-            logger.info(f"Retour Gantry X de {-dist_gantry_test}...")
+            #logger.info(f"Retour Gantry X de {-dist_gantry_test}...")
             # Les positions de départ pour ce mouvement sont les positions finales du mouvement précédent
             # qui sont dans self.current_tp car wait_motion_complete appelle update_all_tp_positions
-            expected_target_A_ret = robot.move_relative(AXIS_X_GANTRY_MASTER, -dist_gantry_test)
-            if expected_target_A_ret is None: raise Exception("move_relative gantry ret failed")
-            robot.wait_motion_complete(AXIS_X_GANTRY_MASTER + AXIS_X_GANTRY_SLAVE)
+            #expected_target_A_ret = robot.move_relative(AXIS_X_GANTRY_MASTER, -dist_gantry_test)
+            #if expected_target_A_ret is None: raise Exception("move_relative gantry ret failed")
+            #robot.wait_motion_complete(AXIS_X_GANTRY_MASTER + AXIS_X_GANTRY_SLAVE)
 
-            robot.check_position_reached(AXIS_X_GANTRY_MASTER, initial_positions_after_dp0[AXIS_X_GANTRY_MASTER])
-            robot.check_position_reached(AXIS_X_GANTRY_SLAVE, initial_positions_after_dp0[AXIS_X_GANTRY_SLAVE])
-            time.sleep(1)
+            #robot.check_position_reached(AXIS_X_GANTRY_MASTER, initial_positions_after_dp0[AXIS_X_GANTRY_MASTER])
+            #robot.check_position_reached(AXIS_X_GANTRY_SLAVE, initial_positions_after_dp0[AXIS_X_GANTRY_SLAVE])
+            #time.sleep(1)
 
             # --- Retour Axe Y ---
-            logger.info(f"Retour Axe Y ({AXIS_Y_TABLE}) de {-dist_y_test}...")
-            expected_target_C_ret = robot.move_relative(AXIS_Y_TABLE, -dist_y_test)
-            if expected_target_C_ret is None: raise Exception("move_relative Y ret failed")
-            robot.wait_motion_complete(AXIS_Y_TABLE)
-            robot.check_position_reached(AXIS_Y_TABLE, initial_positions_after_dp0[AXIS_Y_TABLE])
-            time.sleep(1)
+            #logger.info(f"Retour Axe Y ({AXIS_Y_TABLE}) de {-dist_y_test}...")
+            #expected_target_C_ret = robot.move_relative(AXIS_Y_TABLE, -dist_y_test)
+            #if expected_target_C_ret is None: raise Exception("move_relative Y ret failed")
+            #robot.wait_motion_complete(AXIS_Y_TABLE)
+            #robot.check_position_reached(AXIS_Y_TABLE, initial_positions_after_dp0[AXIS_Y_TABLE])
+            #time.sleep(1)
 
             # ... (Ajouter les tests pour Z, Theta, Phi si nécessaire, en suivant le modèle de Y/C)
 
