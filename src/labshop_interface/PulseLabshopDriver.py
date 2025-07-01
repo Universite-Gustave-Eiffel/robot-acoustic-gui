@@ -1,27 +1,24 @@
-# pulse_labshop_driver_v20_filelog_no_hwdetails.py
+# PulseLabshopDriver.py (V20 - Bibliothèque Finale)
 import comtypes.client
 import comtypes.gen._98BA4851_F724_11CE_9645_0020AF34D7AC_0_1_0 as PulseTLB
 import pythoncom
 import time
 import os
 import logging
-import logging.handlers  # Ajouté pour FileHandler
 import gc
 import threading
 
 # --- Constantes Globales ---
 PULSE_PROGID = 'Pulse.Labshop.Application'
 PULSE_STATE_STOPPED = PulseTLB.BKMeasStopped
-PULSE_STATE_SUSPENDING = PulseTLB.BKMeasSuspending
-PULSE_STATE_RESUMING = PulseTLB.BKMeasResuming
 PULSE_STATE_STARTED = PulseTLB.BKMeasStarted
-PULSE_STATE_FRONTEND_NOT_DETECTED = PulseTLB.BKMeasFrontEndNotDetected
 PULSE_STATE_TEMPLATE_SETTLED = PulseTLB.BKMeasTemplateSetled
 PULSE_STATE_AUTORANGE_COMPLETE = PulseTLB.BKMeasTemplateAutorangeComplete
 PULSE_STATE_AUTORANGE_DENIED = PulseTLB.BKMeasTemplateAutorangeDenied
 TEMPLATE_ACTIVATED_MESSAGE = PulseTLB.BKTemplateActivated
 TEMPLATE_MEAS_STATE_MESSAGE = PulseTLB.BKTemplateMeasState
 
+# Dictionnaire pour le logging lisible des événements
 BKNOTIFICATION_NAMES = {getattr(PulseTLB, name): name for name in dir(PulseTLB)
                         if name.startswith('BK') and isinstance(getattr(PulseTLB, name), int)}
 _event_param_maps = {
@@ -37,11 +34,11 @@ for msg_type, param_dict in _event_param_maps.items():
         if val not in BKNOTIFICATION_NAMES or "RawParamValue" in BKNOTIFICATION_NAMES[val]:
             BKNOTIFICATION_NAMES[val] = f"{name_str_base}({val})"
 
-logger = logging.getLogger("RobotApp.PulseDriver")  # Logger principal de l'application
+logger = logging.getLogger("RobotApp.PulseDriver")
 
 
 class PulseTemplateEvents:
-    # ... (Identique à la version précédente V19) ...
+    # ... (Identique à la version précédente) ...
     def __init__(self, driver_instance):
         self.driver = driver_instance
         logger.debug("PulseTemplateEvents sink instancié.")
@@ -92,7 +89,7 @@ class PulseTemplateEvents:
                     logger.error("  -> Autoranging REFUSÉ (événement). Template NON prêt.")
                     self.driver.is_template_ready_for_measurement = False
                     self.driver.autorange_in_progress_event = False
-                elif Parameter == PULSE_STATE_FRONTEND_NOT_DETECTED:
+                elif Parameter == PulseTLB.BKMeasFrontEndNotDetected:
                     logger.error("  -> ERREUR: Frontend non détecté. Template NON prêt.")
                     self.driver.is_template_ready_for_measurement = False
                     self.driver.is_measurement_active = False
@@ -105,76 +102,66 @@ class PulseTemplateEvents:
                     logger.info(
                         "  -> Template signalé INACTIF (BKTemplateInactive). État actuel de is_template_ready: %s",
                         self.driver.is_template_ready_for_measurement)
-                    if not self.driver._is_activating_template_flag:
-                        self.driver.is_template_ready_for_measurement = False
+                    if not self.driver._is_activating_template_flag: self.driver.is_template_ready_for_measurement = False
         except Exception as e:
             logger.error(f"Erreur dans Notify2: {e}", exc_info=True)
 
 
 class PulseLabshopDriver:
-    # ... (__init__ modifié pour les chemins de log, _event_pump_loop) ...
+    """
+    Driver pour contrôler PULSE LabShop via COM, utilisant la gestion d'événements
+    pour une interaction robuste et asynchrone.
+    """
+
     def __init__(self, project_path=None, save_path_dir=None, function_group_name_to_save="ASauver", log_dir=None):
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.project_path_to_load = project_path if project_path else \
-            os.path.join(script_dir, "pulse_projects", "MinimalTest.pls")
-        self.save_path_dir = save_path_dir if save_path_dir else \
-            os.path.join(script_dir, "mesures_pulse_ascii")
+        self.project_path_to_load = project_path if project_path else os.path.join(script_dir, "pulse_projects",
+                                                                                   "MinimalTest.pls")
+        self.save_path_dir = save_path_dir if save_path_dir else os.path.join(script_dir, "mesures_pulse_ascii")
         self.function_group_name_to_save_param = function_group_name_to_save
-
         self.log_dir_param = log_dir if log_dir else os.path.join(script_dir, "logs_pulse_driver")
-        self._setup_file_logging()  # Configurer le logging vers fichier
+        self._setup_file_logging()
 
         logger.info(f"Chemin du projet à charger: {self.project_path_to_load}")
         logger.info(f"Répertoire de sauvegarde des mesures: {self.save_path_dir}")
         logger.info(f"Nom du FunctionGroup pour sauvegarde: {self.function_group_name_to_save_param}")
-        logger.info(f"Répertoire des logs du driver: {self.log_dir_param}")
 
         self.pulse_app = None
         self.project = None
         self.active_template = None
         self.function_group_to_save = None
-
         self.is_measurement_active = False
         self.is_measurement_complete = True
         self.is_template_ready_for_measurement = False
         self._is_activating_template_flag = False
         self.autorange_in_progress_event = False
-
         self.on_measurement_started_callback = None
         self.on_measurement_stopped_callback = None
-
         self.event_sink = None
         self.event_connection = None
         self.event_thread = None
         self.event_thread_running = False
-        logger.info("PulseLabshopDriver (V20 - LogFile) instancié.")
+        logger.info("PulseLabshopDriver instancié.")
 
     def _setup_file_logging(self):
-        """Configure un FileHandler pour le logger principal de cette application."""
         if not os.path.exists(self.log_dir_param):
             try:
                 os.makedirs(self.log_dir_param, exist_ok=True)
             except OSError as e:
-                logger.error(
-                    f"Impossible de créer le répertoire de logs '{self.log_dir_param}': {e}. Les logs fichier seront désactivés.")
-                return
-
+                logger.error(f"Impossible de créer le répertoire de logs '{self.log_dir_param}': {e}."); return
         log_filename = f"pulse_driver_log_{time.strftime('%Y%m%d_%H%M%S')}.log"
         log_filepath = os.path.join(self.log_dir_param, log_filename)
-
         file_handler = logging.FileHandler(log_filepath, encoding='utf-8')
-        # Mettre un niveau plus détaillé pour le fichier si souhaité, par exemple DEBUG
         file_handler.setLevel(logging.DEBUG)
         formatter = logging.Formatter('%(asctime)s - [%(levelname)s] (%(threadName)s) %(name)s: %(message)s')
         file_handler.setFormatter(formatter)
-
-        # Ajouter ce handler au logger racine ou au logger spécifique de l'application
-        # Ici, on l'ajoute au logger spécifique "RobotApp.PulseDriver"
         app_logger = logging.getLogger("RobotApp.PulseDriver")
-        app_logger.addHandler(file_handler)
-        app_logger.info(f"Logging vers fichier configuré: {log_filepath}")
+        if not any(isinstance(h, logging.FileHandler) for h in app_logger.handlers):
+            app_logger.addHandler(file_handler)
+        logger.info(f"Logging vers fichier configuré: {log_filepath}")
 
     def _event_pump_loop(self):
+        # ... (Identique)
         pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
         logger.debug("Thread de pompage des événements COM dédié démarré.")
         try:
@@ -184,11 +171,11 @@ class PulseLabshopDriver:
         except Exception as e:
             logger.error(f"Erreur thread pompe dédié: {e}", exc_info=True)
         finally:
-            if self.event_thread_running:
-                logger.debug("Thread de pompage des événements COM dédié arrêté.")
+            if self.event_thread_running: logger.debug("Thread de pompage des événements COM dédié arrêté.")
             pythoncom.CoUninitialize()
 
     def initialize_pulse(self):
+        # ... (Identique à la V19, mais sans les appels à _log_hardware_details) ...
         logger.info(f"Initialisation de PULSE LabShop avec projet: {self.project_path_to_load}")
         self.is_template_ready_for_measurement = False
         try:
@@ -233,7 +220,6 @@ class PulseLabshopDriver:
                     self.project.ConfigurationOrganiser.DetectFrontend()
                     logger.info("DetectFrontend() terminé.")
                     time.sleep(2)
-                    # _log_hardware_details est supprimé
                 except pythoncom.com_error as e_detect:
                     logger.warning(f"Erreur lors de DetectFrontend: {e_detect}")
             else:
@@ -274,7 +260,7 @@ class PulseLabshopDriver:
                 return False
             logger.info(f"Utilisation du template '{self.active_template.Name}' (ID/Index: {template_id}).")
 
-            self._log_generator_settings_from_template_setup()  # Log des params générateur
+            self._log_generator_settings_from_template_setup()
 
             self.event_sink = PulseTemplateEvents(self)
             self.event_connection = comtypes.client.GetEvents(self.active_template, self.event_sink,
@@ -285,15 +271,6 @@ class PulseLabshopDriver:
             logger.info("Activation du template...")
             self.active_template.ActivateTemplate()
             logger.info("Commande ActivateTemplate envoyée.")
-
-            try:
-                is_active_sync = self.active_template.Active
-                logger.info(f"État synchrone du template (.Active) après ActivateTemplate() : {is_active_sync}")
-                if is_active_sync:
-                    logger.info("  -> .Active est True, on considère le template prêt (synchrone).")
-                    self.is_template_ready_for_measurement = True
-            except Exception as e_active_prop:
-                logger.warning(f"Impossible de lire active_template.Active : {e_active_prop}")
 
             timeout_template_ready = 60
             start_wait_template = time.time()
@@ -312,7 +289,6 @@ class PulseLabshopDriver:
             self._is_activating_template_flag = False
             logger.info("Template confirmé prêt pour la mesure.")
 
-            # _log_hardware_details est supprimé d'ici aussi
             logger.info("Initialisation PULSE terminée avec succès.")
             return True
 
@@ -551,11 +527,14 @@ class PulseLabshopDriver:
             except Exception:
                 pass
             self.event_connection = None
-        if self.event_sink: self.event_sink = None; logger.debug("Réf Sink libérée.")
-        if self.active_template: self.active_template = None; logger.debug("Réf Template libérée.")
-        if self.project: self.project = None; logger.debug("Réf Projet libérée.")
-        if self.function_group_to_save: self.function_group_to_save = None; logger.debug("Réf FG libérée.")
-        gc.collect()
+        if self.event_sink: self.event_sink = None
+        logger.debug("Référence au Sink d'événements libérée.")
+        if self.active_template: self.active_template = None
+        logger.debug("Référence au Template actif libérée.")
+        if self.project: self.project = None
+        logger.debug("Référence au Projet libérée.")
+        if self.function_group_to_save: self.function_group_to_save = None
+        logger.debug("Référence au FG libérée.")
         gc.collect()
         logger.debug("Garbage collection.")
 
@@ -582,79 +561,66 @@ class PulseLabshopDriver:
             return False
 
 
+# Ce bloc __main__ sera déplacé vers un fichier main.py séparé pour l'intégration finale.
 if __name__ == '__main__':
-    # --- Configuration du Logging ---
-    # Niveau de logging pour la console (peut être INFO pour moins de détails)
-    CONSOLE_LOG_LEVEL = logging.INFO
-    # Niveau de logging pour le fichier (peut être DEBUG pour tous les détails)
-    FILE_LOG_LEVEL = logging.DEBUG
+    # Configuration du Logging pour le test
+    log_format = '%(asctime)s - [%(levelname)s] (%(threadName)s) %(name)s: %(message)s'
 
-    # Créer le logger principal de l'application
-    app_logger = logging.getLogger("RobotApp.PulseDriver")
-    app_logger.setLevel(
-        min(CONSOLE_LOG_LEVEL, FILE_LOG_LEVEL))  # Le logger doit être au niveau le plus bas des handlers
-
-    # Supprimer les handlers existants pour éviter la duplication si le script est ré-exécuté dans un interpréteur
-    # for handler in app_logger.handlers[:]:
-    #     app_logger.removeHandler(handler)
-
-    # Handler pour la console
+    # Handler console (pour voir les messages INFO et supérieurs)
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(CONSOLE_LOG_LEVEL)
-    console_formatter = logging.Formatter('%(asctime)s - [%(levelname)s] (%(threadName)s) %(name)s: %(message)s')
-    console_handler.setFormatter(console_formatter)
-    if not any(isinstance(h, logging.StreamHandler) for h in app_logger.handlers):  # Éviter d'ajouter plusieurs fois
-        app_logger.addHandler(console_handler)
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(logging.Formatter(log_format))
 
-    # Configuration du logger comtypes pour être moins verbeux sur la console
+    # Le logger racine est configuré pour le niveau le plus bas (DEBUG)
+    # pour que les handlers puissent filtrer ce qu'ils veulent montrer.
+    logging.basicConfig(level=logging.DEBUG, handlers=[console_handler])
+
+    # Rendre les loggers comtypes silencieux sur la console
     logging.getLogger('comtypes').setLevel(logging.WARNING)
 
-    # --- Fin Configuration Logging ---
+    # Le logger de notre application est déjà créé par getLogger("RobotApp.PulseDriver")
+    # Il héritera du niveau du logger racine (DEBUG) et enverra tout à la console (qui filtrera à INFO).
+    # Le FileHandler ajouté dans __init__ loggera tout à partir de DEBUG.
 
     try:
         pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED)
         logger.debug("COM initialisé pour le thread principal.")
     except pythoncom.com_error:
-        logger.debug("COM déjà initialisé pour le thread principal ou erreur CoInitializeEx.")
+        logger.debug("COM déjà initialisé pour le thread principal.")
         pass
 
     pulse_driver = None
     try:
-        # Test avec les chemins et nom de FG par défaut définis dans le constructeur
-        # Le driver va maintenant configurer son propre logging fichier dans __init__
+        # Instanciation du driver avec les chemins/noms par défaut
         pulse_driver = PulseLabshopDriver()
 
         if not os.path.exists(pulse_driver.project_path_to_load):
-            logger.critical(
-                f"ERREUR: Le fichier projet par défaut '{pulse_driver.project_path_to_load}' est introuvable. "
-                "Veuillez le créer manuellement ou spécifier un chemin valide lors de l'instanciation du driver.")
+            logger.critical(f"ERREUR: Fichier projet par défaut '{pulse_driver.project_path_to_load}' introuvable.")
         elif pulse_driver.initialize_pulse():
-            logger.info("PULSE (projet minimal) initialisé avec succès.")
-            if pulse_driver.pulse_app: pulse_driver.pulse_app.Visible = True
+            logger.info("<<< INITIALISATION DU DRIVER TERMINÉE AVEC SUCCÈS >>>")
             time.sleep(1)
 
 
             def measurement_started_cb():
-                logger.info("CALLBACK: Mesure démarrée !")
+                logger.info("<<< CALLBACK: Mesure démarrée ! >>>")
 
 
             def measurement_stopped_cb():
-                logger.info("CALLBACK: Mesure terminée !")
+                logger.info("<<< CALLBACK: Mesure terminée ! >>>")
 
 
             pulse_driver.on_measurement_started_callback = measurement_started_cb
             pulse_driver.on_measurement_stopped_callback = measurement_stopped_cb
 
             if pulse_driver.is_template_ready_for_measurement:
-                logger.info("Tentative d'Autorange...")
-                autorange_completed_successfully = pulse_driver.autorange()
+                logger.info("--- DÉBUT DE LA SÉQUENCE DE TEST ---")
 
-                if autorange_completed_successfully:
-                    logger.info("Autorange a réussi.")
-                    if not pulse_driver.is_template_ready_for_measurement:
-                        logger.error("Problème: Autorange OK, mais template non prêt ensuite. Mesure annulée.")
-                    elif pulse_driver.start_measurement():
-                        logger.info("start_measurement envoyé après autorange.")
+                logger.info("==> Étape 1: Autorange...")
+                if pulse_driver.autorange():
+                    logger.info("==> Autorange réussi.")
+
+                    logger.info("==> Étape 2: Démarrage de la mesure...")
+                    if pulse_driver.start_measurement():
                         timeout_start = 30
                         start_time_wait = time.time()
                         while not pulse_driver.is_measurement_active and (
@@ -663,49 +629,52 @@ if __name__ == '__main__':
                             time.sleep(0.1)
 
                         if pulse_driver.is_measurement_active:
-                            logger.info("Mesure confirmée ACTIVE.")
-                            logger.info("Simulation durée de mesure de 5 secondes...")
+                            logger.info("==> Mesure confirmée ACTIVE.")
+                            logger.info("    (Simulation d'une durée de mesure de 5 secondes...)")
                             time.sleep(5)
+
+                            logger.info("==> Étape 3: Arrêt de la mesure...")
                             pulse_driver.stop_measurement()
-                            logger.info("stop_measurement envoyé.")
                             timeout_stop = 10
                             stop_time_wait = time.time()
                             while not pulse_driver.is_measurement_complete and (
                                     time.time() - stop_time_wait) < timeout_stop:
                                 pythoncom.PumpWaitingMessages()
                                 time.sleep(0.1)
+
                             if pulse_driver.is_measurement_complete:
-                                logger.info("Mesure confirmée COMPLÈTE.")
-                                filename_suffix = f"MinTest_FG_{pulse_driver.function_group_name_to_save_param}_{time.strftime('%Y%m%d_%H%M%S')}.txt"
+                                logger.info("==> Mesure confirmée COMPLÈTE.")
+
+                                logger.info("==> Étape 4: Sauvegarde des résultats...")
+                                filename_suffix = f"Test_{pulse_driver.function_group_name_to_save_param}_{time.strftime('%Y%m%d_%H%M%S')}.txt"
                                 pulse_driver.save_function_group_ascii(filename_suffix)
                             else:
-                                logger.error("Timeout: Mesure non confirmée complète post-stop.")
+                                logger.error(
+                                    "Échec: Timeout après la commande Stop. La mesure n'a pas été confirmée comme complète.")
                         else:
-                            logger.error("Timeout/Échec: Mesure non active post-autorange/start.")
+                            logger.error(
+                                "Échec: Timeout après la commande Start. La mesure n'a pas été confirmée comme active.")
                     else:
-                        logger.error("Échec envoi commande start_measurement post-autorange.")
+                        logger.error("Échec de l'envoi de la commande start_measurement.")
                 else:
-                    logger.error("Échec Autorange ou template non prêt. Mesure non tentée.")
+                    logger.error("Échec de la commande Autorange. Séquence de test annulée.")
             else:
-                logger.error("Template non prêt après initialize_pulse. Test de mesure annulé.")
+                logger.error("Template non prêt après l'initialisation. Séquence de test annulée.")
             time.sleep(1)
         else:
-            logger.error("Échec initialisation PULSE avec projet minimal.")
+            logger.error("Échec de l'initialisation de PULSE.")
 
     except Exception as e_main_test:
-        logger.critical(f"Erreur critique test principal: {e_main_test}", exc_info=True)
+        logger.critical(f"Erreur critique dans le test principal: {e_main_test}", exc_info=True)
     finally:
         if pulse_driver:
-            pulse_driver.close()  # close s'occupe d'arrêter le thread et de libérer COM
+            pulse_driver.close()
 
-        # CoUninitialize pour le thread principal est important s'il a été initialisé.
-        # Il est préférable de le faire ici plutôt que dans close() du driver,
-        # car le driver pourrait être utilisé par un thread qui n'est pas le principal.
         try:
             if threading.current_thread() is threading.main_thread():
                 pythoncom.CoUninitialize()
                 logger.debug("COM désinitialisé pour le thread principal (fin).")
-        except Exception as e_final_co:  # pythoncom peut parfois lever une erreur si déjà désinitialisé
-            logger.debug(f"Erreur CoUninitialize final (peut être normal): {e_final_co}")
+        except Exception:
+            pass
 
-        logger.info(f"Fin du test V19 (intégrant générateur implicite).")
+        logger.info(f"--- FIN DU TEST ---")
