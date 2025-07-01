@@ -1,4 +1,5 @@
-# src/controller_interface/GalilDriver.py
+# src/controller_interface/GalilDMC2260Driver.py
+
 import serial
 import time
 import logging
@@ -6,7 +7,7 @@ import configparser
 import math
 import os
 
-# --- Constantes partagées ---
+# --- Constantes ---
 AXIS_X_GANTRY_MASTER, AXIS_X_GANTRY_SLAVE = 'A', 'B'
 AXIS_Y_TABLE, AXIS_Z_VERTICAL = 'C', 'D'
 AXIS_THETA_ROTATION, AXIS_PHI_TILT = 'E', 'F'
@@ -14,12 +15,9 @@ ALL_AXES_PHYSICAL = "ABCDEF"
 AXES_ORDER = ['A', 'B', 'C', 'D', 'E', 'F']
 
 
-# ==============================================================================
-#  CLASSE DRIVER BAS NIVEAU : COMMUNICATION AVEC LE CONTRÔLEUR
-# ==============================================================================
+# --- Classe Driver Bas Niveau (inchangée) ---
 class GalilDriver:
-    """Couche de communication de bas niveau avec le contrôleur Galil. Parle en commandes et steps."""
-
+    # ... (Le code de GalilDriver reste identique)
     def __init__(self, port, baudrate, timeout):
         self.port_name, self.baud_rate, self.timeout = port, baudrate, timeout
         self.ser, self.is_connected, self.echo_disabled = None, False, False
@@ -89,8 +87,10 @@ class GalilDriver:
     def send_query(self, command: str, retries=2):
         for attempt in range(retries + 1):
             response = self.send_cmd(command)
-            if response is not None and '?' not in response:
+            if response is not None and '?' not in response and response.strip() != '':
                 return response.replace(':', '').strip()
+            self.logger.warning(
+                f"Requête '{command}' a retourné une réponse invalide/vide: '{response}'. Tentative {attempt + 1}/{retries + 1}")
             if attempt < retries: time.sleep(0.1 + 0.2 * attempt)
         self.logger.error(f"Échec final de la requête '{command}'.")
         return None
@@ -114,16 +114,11 @@ class GalilDriver:
         time.sleep(0.2)
 
 
-# ==============================================================================
-#  CLASSE CONTRÔLEUR HAUT NIVEAU : API DU ROBOT
-# ==============================================================================
+# --- Classe Contrôleur Haut Niveau ---
 class RobotController:
-    """Couche d'abstraction du robot. Gère les unités, la cinématique et les commandes de haut niveau."""
-
-    AXIS_MAPPING = {
-        'X': AXIS_X_GANTRY_MASTER, 'Y': AXIS_Y_TABLE, 'Z': AXIS_Z_VERTICAL,
-        'THETA': AXIS_THETA_ROTATION, 'PHI': AXIS_PHI_TILT
-    }
+    AXIS_MAPPING = {'X': 'A', 'Y': 'C', 'Z': 'D', 'THETA': 'E', 'PHI': 'F'}
+    AXIS_GANTRY_SLAVE = 'B'
+    ALL_AXES = ALL_AXES_PHYSICAL
 
     def __init__(self, driver: GalilDriver, config: configparser.ConfigParser):
         self.driver = driver
@@ -140,15 +135,15 @@ class RobotController:
 
     def enable_motors(self):
         self.logger.info("Activation des moteurs...")
-        self.driver.send_cmd(f"SH{ALL_AXES_PHYSICAL}")
+        self.driver.send_cmd(f"SH{self.ALL_AXES}")
 
     def disable_motors(self):
         self.logger.info("Désactivation des moteurs...")
-        self.driver.send_cmd(f"MO{ALL_AXES_PHYSICAL}")
+        self.driver.send_cmd(f"MO{self.ALL_AXES}")
 
     def stop_all_motion(self):
         self.logger.warning("Arrêt d'urgence.")
-        self.driver.send_cmd(f"ST{ALL_AXES_PHYSICAL}")
+        self.driver.send_cmd(f"ST{self.ALL_AXES}")
 
     def _to_steps(self, axis_name, value):
         ratio = self.config.getfloat('RATIOS', axis_name.lower())
@@ -159,7 +154,7 @@ class RobotController:
         return steps / ratio if ratio != 0 else 0.0
 
     def update_positions(self):
-        raw_steps = self.driver.get_tp_positions(ALL_AXES_PHYSICAL)
+        raw_steps = self.driver.get_tp_positions(self.ALL_AXES)
         if raw_steps:
             for name, letter in self.AXIS_MAPPING.items():
                 self.robot_pos[name] = self._from_steps(name, raw_steps.get(letter, 0))
@@ -183,18 +178,17 @@ class RobotController:
         self.capsule_pos['Z'] = z_p - (corr_p_l * sp)
 
     def move_to(self, **kwargs):
-        axes_to_move = set()
-        pa_values = [''] * len(AXES_ORDER)
+        axes_to_move_set, pa_values = set(), [''] * len(AXES_ORDER)
         for name, value in kwargs.items():
             name_up = name.upper()
             if name_up in self.AXIS_MAPPING:
                 axis_letter = self.AXIS_MAPPING[name_up]
                 steps = self._to_steps(name_up, value)
                 pa_values[AXES_ORDER.index(axis_letter)] = str(steps)
-                axes_to_move.add(axis_letter)
-        if not axes_to_move: self.logger.warning("move_to appelé sans coordonnées valides."); return
-        if self.AXIS_MAPPING['X'] in axes_to_move: axes_to_move.add(AXIS_X_GANTRY_SLAVE)
-        axes_to_begin_str = "".join(sorted(list(axes_to_move)))
+                axes_to_move_set.add(axis_letter)
+        if not axes_to_move_set: self.logger.warning("move_to appelé sans coordonnées valides."); return
+        if self.AXIS_MAPPING['X'] in axes_to_move_set: axes_to_move_set.add(self.AXIS_GANTRY_SLAVE)
+        axes_to_begin_str = "".join(sorted(list(axes_to_move_set)))
         cmd_pa = f"PA {','.join(pa_values)}"
         self.logger.info(f"Mouvement Absolu: {cmd_pa} | BG {axes_to_begin_str}")
         self.driver.send_cmd(cmd_pa)
@@ -208,7 +202,8 @@ class RobotController:
 
     def define_current_position_as_zero(self):
         self.logger.info("Définition position comme nouvelle origine.")
-        self.driver.send_cmd("DP 0,0,0,0,0,0")
+        self.driver.send_cmd(
+            "DP 0,0,0,0,0,0")
         self.update_positions()
 
     def jog(self, axis_name, speed):
