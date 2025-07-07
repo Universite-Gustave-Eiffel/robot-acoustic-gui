@@ -1,4 +1,4 @@
-# src/controller_interface/GalilDMC2260Driver.py
+# src/controller_interface/GalilDriver.py
 
 import serial
 import time
@@ -17,7 +17,6 @@ AXES_ORDER = ['A', 'B', 'C', 'D', 'E', 'F']
 
 # --- Classe Driver Bas Niveau (inchangée) ---
 class GalilDriver:
-    # ... (Le code de GalilDriver reste identique)
     def __init__(self, port, baudrate, timeout):
         self.port_name, self.baud_rate, self.timeout = port, baudrate, timeout
         self.ser, self.is_connected, self.echo_disabled = None, False, False
@@ -71,6 +70,7 @@ class GalilDriver:
         if not self.is_connected: return None
         self.logger.debug(f"CMD> {command}")
         self.ser.reset_input_buffer()
+        self.ser.reset_output_buffer()
         self.ser.write((command + '\r').encode('ascii'))
         time.sleep(0.05)
         original_timeout = self.ser.timeout
@@ -104,7 +104,7 @@ class GalilDriver:
                 return dict(zip(axes_str, positions))
             except (ValueError, IndexError):
                 self.logger.error(f"Erreur parsing _TP, réponse: '{response}'")
-        return {ax: 0.0 for ax in axes_str}
+        return None  # Retourne None en cas d'échec pour pouvoir le tester
 
     def wait_motion_complete(self, axes_str, timeout=45.0):
         if not self.is_connected or not axes_str: return
@@ -159,7 +159,9 @@ class RobotController:
             for name, letter in self.AXIS_MAPPING.items():
                 self.robot_pos[name] = self._from_steps(name, raw_steps.get(letter, 0))
             self._calculate_capsule_position()
-        return self.robot_pos
+            return self.robot_pos
+        self.logger.warning("Impossible de mettre à jour les positions (réponse nulle du driver).")
+        return None  # Important de retourner None si la lecture échoue
 
     def _calculate_capsule_position(self):
         x_r, y_r, z_r = self.robot_pos['X'], self.robot_pos['Y'], self.robot_pos['Z']
@@ -202,17 +204,71 @@ class RobotController:
 
     def define_current_position_as_zero(self):
         self.logger.info("Définition position comme nouvelle origine.")
-        self.driver.send_cmd(
-            "DP 0,0,0,0,0,0")
+        self.driver.send_cmd("DP 0,0,0,0,0,0")
         self.update_positions()
 
-    def jog(self, axis_name, speed):
-        axis_letter = self.AXIS_MAPPING[axis_name.upper()]
-        steps_per_sec = self._to_steps(axis_name.upper(), speed)
-        self.driver.send_cmd(f"JG{axis_letter}={int(steps_per_sec)}")
-        if axis_letter == AXIS_X_GANTRY_MASTER: self.driver.send_cmd(f"JG{AXIS_X_GANTRY_SLAVE}={int(-steps_per_sec)}")
+    def set_parking(self):
+        """
+        Met à jour l'objet de configuration en mémoire avec la position de parking ACTUELLE.
+        NOTE : La position doit être à jour avant d'appeler cette méthode (via update_positions).
+        """
+        self.logger.info("Mise à jour de la configuration de parking en mémoire avec la position actuelle.")
+        if not self.config.has_section('ROBOT_POSITIONS'):
+            self.config.add_section('ROBOT_POSITIONS')
 
-    def begin_jog_mode(self):
-        self.logger.info(f"Activation du mode Jogging sur les axes: {ALL_AXES_PHYSICAL}")
-        for axis in ALL_AXES_PHYSICAL: self.driver.send_cmd(f"JG{axis}=0")
-        self.driver.send_cmd(f"BG{ALL_AXES_PHYSICAL}")
+        if not self.robot_pos:
+            self.logger.warning("robot_pos est vide. Appelez update_positions() avant set_parking().")
+            return
+
+        for axis_name, position in self.robot_pos.items():
+            config_key = f"parking_{axis_name.lower()}"
+            self.config.set('ROBOT_POSITIONS', config_key, f"{position:.4f}")
+            self.logger.debug(f"Parking {axis_name} défini à {position:.2f}")
+
+    def go_to_parking(self):
+        """Se déplace vers la position de parking enregistrée."""
+        self.logger.info("Déplacement vers la position de parking...")
+        try:
+            parking_coords = {
+                'X': self.config.getfloat('ROBOT_POSITIONS', 'parking_x'),
+                'Y': self.config.getfloat('ROBOT_POSITIONS', 'parking_y'),
+                'Z': self.config.getfloat('ROBOT_POSITIONS', 'parking_z'),
+                'THETA': self.config.getfloat('ROBOT_POSITIONS', 'parking_theta'),
+                'PHI': self.config.getfloat('ROBOT_POSITIONS', 'parking_phi'),
+            }
+            self.logger.info(f"Cible Parking: {parking_coords}")
+            self.move_to(**parking_coords)
+            self.logger.info("Position de parking atteinte.")
+        except (configparser.NoSectionError, configparser.NoOptionError) as e:
+            self.logger.error(f"Position de parking non définie ou incomplète dans config.ini. Erreur: {e}")
+        except Exception as e:
+            self.logger.error(f"Erreur lors du déplacement vers le parking: {e}")
+
+    # --- NOUVELLE MÉTHODE ---
+    def move_relative(self, **kwargs):
+        """
+        Déplace un ou plusieurs axes d'une distance relative par rapport à leur position actuelle.
+        Exemple: move_relative(X=10, Z=-5)
+        """
+        if not kwargs:
+            self.logger.warning("move_relative appelé sans arguments.")
+            return
+
+        # S'assurer que la position actuelle est connue
+        self.update_positions()
+
+        # Copier la position actuelle pour ne pas la modifier directement
+        target_coords = self.robot_pos.copy()
+
+        axes_to_move_str = ""
+        for axis, distance in kwargs.items():
+            axis_upper = axis.upper()
+            if axis_upper in target_coords:
+                # Calculer la nouvelle position cible
+                target_coords[axis_upper] += float(distance)
+                axes_to_move_str += self.AXIS_MAPPING[axis_upper]
+            else:
+                self.logger.warning(f"Axe inconnu dans move_relative : {axis}")
+
+        self.logger.info(f"Déplacement relatif vers les coordonnées cibles : {target_coords}")
+        self.move_to(**target_coords)
