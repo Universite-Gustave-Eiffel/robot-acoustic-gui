@@ -3,12 +3,13 @@ import time
 import logging
 
 
+# L'import de pythoncom n'est plus nécessaire ici.
+
 class State:
     """Classe de base abstraite pour tous les états."""
 
-    def __init__(self, robot, pulse):
+    def __init__(self, robot):
         self.robot = robot
-        self.pulse = pulse
         self.name = self.__class__.__name__
         self.logger = logging.getLogger(f"RobotApp.FSM.{self.name}")
 
@@ -32,30 +33,73 @@ class StateMoveToPoint(State):
         point_index = context['current_index']
         point = context['points'][point_index]
         robot_lock = context['robot_lock']
-
         self.logger.info(f"Déplacement vers le point {point_index + 1}: {point}")
-
-        # Le bloc 'with' garantit que le verrou est acquis avant le mouvement
-        # et relâché automatiquement après, même en cas d'erreur.
         with robot_lock:
             self.robot.move_to(x=point.x, y=point.y, z=point.z, theta=point.theta, phi=point.phi)
+        return StateStartMeasure, context
 
-        return StateMeasure, context
 
-
-class StateMeasure(State):
-    """Simule la prise de mesure."""
+class StateStartMeasure(State):
+    """Demande le démarrage de la mesure PULSE."""
 
     def execute(self, context):
+        seq_manager = context['sequence_manager']
+        self.logger.info(f"Demande de démarrage de la mesure pour le point {context['current_index'] + 1}.")
+
+        seq_manager.action_completed_event.clear()
+        seq_manager.action_success = False
+        seq_manager.start_measure_requested.emit()
+        seq_manager.action_completed_event.wait()  # Attend la réponse du MainController
+
+        if not seq_manager.action_success:
+            return StateError, context
+
+        return StateStopMeasure, context
+
+
+class StateStopMeasure(State):
+    """Demande l'arrêt de la mesure PULSE."""
+
+    def execute(self, context):
+        seq_manager = context['sequence_manager']
+        self.logger.info("Demande d'arrêt de la mesure.")
+
+        # La durée de l'acquisition est gérée par le template PULSE.
+        # Ici on attend simplement un peu que la mesure se fasse avant de demander l'arrêt.
+        time.sleep(2.0)
+
+        seq_manager.action_completed_event.clear()
+        seq_manager.action_success = False
+        seq_manager.stop_measure_requested.emit()
+        seq_manager.action_completed_event.wait()
+
+        if not seq_manager.action_success:
+            return StateError, context
+
+        return StateSaveMeasure, context
+
+
+class StateSaveMeasure(State):
+    """Demande la sauvegarde des données de la mesure PULSE."""
+
+    def execute(self, context):
+        seq_manager = context['sequence_manager']
         point_index = context['current_index']
-        self.logger.info(f"Début de la mesure au point {point_index + 1}.")
+        base_filename = context.get('base_filename', 'mesure')
 
-        # Simulation d'une mesure de 2 secondes.
-        # Cette pause ne nécessite pas de verrou car elle n'utilise pas le robot.
-        time.sleep(2)
+        filename = f"{base_filename}_point_{point_index + 1}.txt"
+        self.logger.info(f"Demande de sauvegarde vers '{filename}'")
 
-        self.logger.info("Mesure terminée.")
-        return StateNextPoint, context
+        seq_manager.action_completed_event.clear()
+        seq_manager.action_success = False
+        seq_manager.save_measure_requested.emit(filename)
+        seq_manager.action_completed_event.wait()
+
+        if seq_manager.action_success:
+            context['points'][point_index].measurement_file = filename
+            return StateNextPoint, context
+        else:
+            return StateError, context
 
 
 class StateNextPoint(State):
