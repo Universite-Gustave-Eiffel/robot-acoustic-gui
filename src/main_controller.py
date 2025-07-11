@@ -5,7 +5,7 @@ import configparser
 import threading
 import time
 from pathlib import Path
-from PySide6.QtCore import QObject, Signal, QTimer, Slot
+from PySide6.QtCore import QObject, Signal, QTimer, Slot, QCoreApplication
 
 from src.labshop_interface.PulseLabshopDriver import PulseLabshopDriver
 from src.controller_interface.GalilDriver import RobotController, GalilDriver
@@ -25,7 +25,7 @@ def get_config(interface_name: str):
 
 
 class MainController(QObject):
-    """Chef d'orchestre de l'application."""
+    """Chef d'orchestre de l'application. Gère les drivers et la logique métier."""
 
     log_message_sent = Signal(str)
     robot_position_updated = Signal(dict)
@@ -48,6 +48,7 @@ class MainController(QObject):
         self.robot_config_path = None
 
         self.pulse = None
+        self.pulse_config = None
 
         self.position_timer = QTimer(self)
         self.position_timer.setInterval(500)
@@ -75,12 +76,13 @@ class MainController(QObject):
 
     def setup_pulse(self):
         try:
-            pulse_config, _ = get_config('labshop_interface')
+            pulse_config_obj, _ = get_config('labshop_interface')
+            self.pulse_config = pulse_config_obj
             self.pulse = PulseLabshopDriver(
-                project_path=pulse_config.get('PulseSettings', 'project_path'),
-                save_path_dir=pulse_config.get('PulseSettings', 'save_path_dir'),
-                function_group_name_to_save=pulse_config.get('PulseSettings', 'function_group_to_save'),
-                log_dir=pulse_config.get('PulseSettings', 'log_dir')
+                project_path=self.pulse_config.get('PulseSettings', 'project_path'),
+                save_path_dir=self.pulse_config.get('PulseSettings', 'save_path_dir'),
+                function_group_name_to_save=self.pulse_config.get('PulseSettings', 'function_group_to_save'),
+                log_dir=self.pulse_config.get('PulseSettings', 'log_dir')
             )
             if self.pulse.initialize_pulse():
                 self.log_message_sent.emit("Interface PULSE LabShop initialisée avec succès.")
@@ -139,6 +141,7 @@ class MainController(QObject):
             self.log_message_sent.emit("Robot déconnecté.")
 
     def sync_points_from_gui(self, table_data: list[dict]):
+        """Met à jour le PointManager avec les données actuelles de la GUI."""
         self.point_manager.update_from_list_of_dicts(table_data)
 
     def process_loaded_file(self, file_path: str):
@@ -160,6 +163,7 @@ class MainController(QObject):
         return False
 
     def save_point_list_to_file(self, file_path: str) -> bool:
+        # La synchronisation est faite par le slot appelant (_on_save_triggered)
         if self.point_manager.save_to_file(file_path):
             self.current_file_path = file_path
             self.log_message_sent.emit(f"Fichier '{Path(file_path).name}' sauvegardé.")
@@ -169,19 +173,24 @@ class MainController(QObject):
 
     @Slot()
     def add_new_point(self):
-        self.point_manager.add_point(); self._notify_point_list_changed()
+        # La synchronisation est faite par le slot appelant (_on_add_point_triggered)
+        self.point_manager.add_point()
+        self._notify_point_list_changed()
 
     @Slot(list)
     def delete_selected_points(self, indices: list[int]):
-        self.point_manager.delete_points(indices); self._notify_point_list_changed()
+        self.point_manager.delete_points(indices)
+        self._notify_point_list_changed()
 
     @Slot(int)
     def move_selected_point_up(self, index: int):
-        self.point_manager.move_point_up(index); self._notify_point_list_changed()
+        self.point_manager.move_point_up(index)
+        self._notify_point_list_changed()
 
     @Slot(int)
     def move_selected_point_down(self, index: int):
-        self.point_manager.move_point_down(index); self._notify_point_list_changed()
+        self.point_manager.move_point_down(index)
+        self._notify_point_list_changed()
 
     @Slot()
     def _on_start_measure_requested(self):
@@ -219,7 +228,7 @@ class MainController(QObject):
             return
 
         self.log_message_sent.emit("Démarrage de la séquence de mesure...")
-        self.sequence_thread = SequenceManager(self.robot, points)
+        self.sequence_thread = SequenceManager(self.robot, self.pulse, points)
 
         self.sequence_thread.start_measure_requested.connect(self._on_start_measure_requested)
         self.sequence_thread.stop_measure_requested.connect(self._on_stop_measure_requested)
@@ -228,6 +237,7 @@ class MainController(QObject):
 
         self.sequence_thread.active_point_changed.connect(self.highlight_point_in_gui)
         self.sequence_thread.status_changed.connect(self.sequence_status_changed)
+        # CORRIGÉ : Connexion au bon signal
         self.sequence_thread.sequence_completed.connect(self.on_sequence_finished)
 
         base_name = Path(self.current_file_path).stem if self.current_file_path else "mesure_sans_nom"
@@ -245,7 +255,10 @@ class MainController(QObject):
     @Slot(str)
     def on_sequence_finished(self, final_message: str):
         self.log_message_sent.emit(f"Séquence terminée. Statut: {final_message}")
+
+        # CORRIGÉ : Mise à jour du manager AVANT de notifier la GUI
         if self.sequence_thread:
+            self.point_manager.points = self.sequence_thread.context['points']
             try:
                 self.sequence_thread.start_measure_requested.disconnect()
                 self.sequence_thread.stop_measure_requested.disconnect()
@@ -253,20 +266,25 @@ class MainController(QObject):
                 self.measure_action_completed.disconnect()
             except RuntimeError as e:
                 self.logger.warning(f"Erreur lors de la déconnexion des signaux : {e}")
+
         self.sequence_thread = None
         self.pulse_lock.release()
+        # On notifie la GUI que la liste (avec les noms de fichiers) a changé
         self.point_list_changed.emit(self.point_manager.get_points_as_list_of_dicts())
+        self.set_document_modified(True)
 
     @Slot()
     def start_manual_measurement(self):
         if not self.pulse: self.log_message_sent.emit("Impossible de mesurer : interface PULSE non prête."); return
         if not self.pulse_lock.acquire(blocking=False): self.log_message_sent.emit(
             "Interface PULSE occupée par la séquence."); return
+
         try:
             if self.pulse.is_measurement_active: self.log_message_sent.emit(
                 "Une mesure manuelle est déjà en cours."); return
-            if not self.pulse.is_template_ready_for_measurement and not self.pulse.autorange(): self.log_message_sent.emit(
-                "Échec de l'autorange."); return
+            if not self.pulse.is_template_ready_for_measurement and not self.pulse.autorange():
+                self.log_message_sent.emit("Échec de l'autorange.")
+                return
             self.pulse.start_measurement()
             self.log_message_sent.emit("Mesure manuelle démarrée.")
         finally:

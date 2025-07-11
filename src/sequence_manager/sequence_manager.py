@@ -1,9 +1,9 @@
 # src/sequence_manager/sequence_manager.py
 import logging
 import threading
-from PySide6.QtCore import QThread, Signal, Slot
+from PySide6.QtCore import QThread, Signal, Slot, QEventLoop
 
-# CORRIGÉ : Import de tous les états utilisés
+# L'import de PulseLabshopDriver n'est plus nécessaire
 from .states import StateIdle, StateMoveToPoint, StateEnd, StateError, StateNextPoint, StateStartMeasure, \
     StateStopMeasure, StateSaveMeasure
 
@@ -11,17 +11,20 @@ from .states import StateIdle, StateMoveToPoint, StateEnd, StateError, StateNext
 class SequenceManager(QThread):
     """Gère l'exécution d'une séquence de mesure en émettant des signaux pour les actions matérielles."""
 
+    # --- Signaux pour la GUI ---
     status_changed = Signal(str)
     active_point_changed = Signal(int)
-    sequence_completed = Signal(str)
+    sequence_completed = Signal(str)  # Signal personnalisé pour la fin
 
+    # --- Signaux pour le MainController ---
     start_measure_requested = Signal()
     stop_measure_requested = Signal()
     save_measure_requested = Signal(str)
 
-    def __init__(self, robot, points):
+    def __init__(self, robot, pulse, points):
         super().__init__()
         self.robot = robot
+        self.pulse = pulse  # Garde la référence pour que les états y accèdent
         self.current_state = None
         self.context = {
             'points': points,
@@ -62,7 +65,6 @@ class SequenceManager(QThread):
 
                 next_state_class, self.context = self.current_state.execute(self.context)
 
-                # Vérifie si une action a échoué DANS un état qui utilise l'événement
                 if not self.action_success and self.current_state.name in ["StateStartMeasure", "StateStopMeasure",
                                                                            "StateSaveMeasure"]:
                     self.context['error'] = self.action_message
@@ -85,7 +87,7 @@ class SequenceManager(QThread):
 
         self.status_changed.emit(final_message)
         self.active_point_changed.emit(-1)
-        self.sequence_completed.emit(final_message)  # Utilisation du signal personnalisé
+        self.sequence_completed.emit(final_message)
         self._is_running = False
 
     def stop(self):

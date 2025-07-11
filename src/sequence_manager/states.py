@@ -3,8 +3,6 @@ import time
 import logging
 
 
-# L'import de pythoncom n'est plus nécessaire ici.
-
 class State:
     """Classe de base abstraite pour tous les états."""
 
@@ -34,8 +32,13 @@ class StateMoveToPoint(State):
         point = context['points'][point_index]
         robot_lock = context['robot_lock']
         self.logger.info(f"Déplacement vers le point {point_index + 1}: {point}")
+
+        # Le bloc with et l'appel à move_to gèrent l'attente.
+        # move_to est bloquant et ne retourne que lorsque le mouvement est terminé.
         with robot_lock:
+            # CORRIGÉ : L'attente est déjà dans move_to. Pas besoin d'un appel supplémentaire.
             self.robot.move_to(x=point.x, y=point.y, z=point.z, theta=point.theta, phi=point.phi)
+
         return StateStartMeasure, context
 
 
@@ -49,7 +52,7 @@ class StateStartMeasure(State):
         seq_manager.action_completed_event.clear()
         seq_manager.action_success = False
         seq_manager.start_measure_requested.emit()
-        seq_manager.action_completed_event.wait()  # Attend la réponse du MainController
+        seq_manager.action_completed_event.wait()
 
         if not seq_manager.action_success:
             return StateError, context
@@ -64,10 +67,6 @@ class StateStopMeasure(State):
         seq_manager = context['sequence_manager']
         self.logger.info("Demande d'arrêt de la mesure.")
 
-        # La durée de l'acquisition est gérée par le template PULSE.
-        # Ici on attend simplement un peu que la mesure se fasse avant de demander l'arrêt.
-        time.sleep(2.0)
-
         seq_manager.action_completed_event.clear()
         seq_manager.action_success = False
         seq_manager.stop_measure_requested.emit()
@@ -76,6 +75,26 @@ class StateStopMeasure(State):
         if not seq_manager.action_success:
             return StateError, context
 
+        return StateWaitForMeasure, context
+
+
+class StateWaitForMeasure(State):
+    """Attend que PULSE confirme que la mesure est bien arrêtée."""
+
+    def execute(self, context):
+        seq_manager = context['sequence_manager']
+        pulse = seq_manager.pulse
+        timeout = 10
+        start_time = time.time()
+
+        # On attend simplement que le flag is_measurement_active passe à False
+        # suite aux événements COM traités par le thread principal.
+        while pulse.is_measurement_active:
+            if time.time() - start_time > timeout:
+                raise Exception("Timeout en attendant l'arrêt de la mesure Pulse.")
+            time.sleep(0.1)
+
+        self.logger.info("Mesure PULSE confirmée comme étant arrêtée.")
         return StateSaveMeasure, context
 
 

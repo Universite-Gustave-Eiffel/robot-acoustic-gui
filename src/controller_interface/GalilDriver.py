@@ -7,7 +7,7 @@ import configparser
 import math
 import os
 
-# --- Constantes ---
+# --- Constantes (inchangées) ---
 AXIS_X_GANTRY_MASTER, AXIS_X_GANTRY_SLAVE = 'A', 'B'
 AXIS_Y_TABLE, AXIS_Z_VERTICAL = 'C', 'D'
 AXIS_THETA_ROTATION, AXIS_PHI_TILT = 'E', 'F'
@@ -15,8 +15,8 @@ ALL_AXES_PHYSICAL = "ABCDEF"
 AXES_ORDER = ['A', 'B', 'C', 'D', 'E', 'F']
 
 
-# --- Classe Driver Bas Niveau (inchangée) ---
 class GalilDriver:
+    # ... __init__, connect, disconnect, _disable_echo, send_cmd, send_query inchangés ...
     def __init__(self, port, baudrate, timeout):
         self.port_name, self.baud_rate, self.timeout = port, baudrate, timeout
         self.ser, self.is_connected, self.echo_disabled = None, False, False
@@ -104,18 +104,45 @@ class GalilDriver:
                 return dict(zip(axes_str, positions))
             except (ValueError, IndexError):
                 self.logger.error(f"Erreur parsing _TP, réponse: '{response}'")
-        return None  # Retourne None en cas d'échec pour pouvoir le tester
+        return None
 
+    # CORRIGÉ : Implémentation robuste de l'attente de fin de mouvement
     def wait_motion_complete(self, axes_str, timeout=45.0):
         if not self.is_connected or not axes_str: return
         self.logger.info(f"Attente fin de mouvement pour axes: {axes_str} (timeout={timeout}s)...")
+
+        # 1. Envoyer la commande After Motion. Elle se débloquera dès que le profil est terminé.
         self.send_cmd(f"AM{axes_str}", timeout_override=timeout)
-        self.logger.info(f"Mouvement (AM) terminé pour {axes_str}.")
-        time.sleep(0.2)
+        self.logger.info(f"Profil de mouvement (AM) terminé pour {axes_str}.")
+
+        # 2. NOUVEAU : Boucler sur l'opérande _BG pour attendre la stabilisation physique
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            all_axes_stopped = True
+            for axis in axes_str:
+                response = self.send_query(f"MG _BG{axis}")
+                try:
+                    if response is not None and float(response) != 0:
+                        all_axes_stopped = False
+                        break  # Un seul axe en mouvement suffit
+                except (ValueError, TypeError):
+                    self.logger.warning(f"Réponse invalide pour _BG{axis}: '{response}'")
+                    all_axes_stopped = False  # Sécurité
+                    break
+
+            if all_axes_stopped:
+                self.logger.info("Tous les axes sont physiquement à l'arrêt.")
+                time.sleep(0.2)  # Courte pause de stabilisation finale
+                return
+
+            time.sleep(0.1)  # Pause entre les vérifications
+
+        self.logger.error(f"Timeout dépassé en attendant l'arrêt physique des axes {axes_str}.")
 
 
-# --- Classe Contrôleur Haut Niveau ---
+# --- Classe Contrôleur Haut Niveau (inchangée, car la correction est dans le driver) ---
 class RobotController:
+    # ... Contenu de la classe inchangé ...
     AXIS_MAPPING = {'X': 'A', 'Y': 'C', 'Z': 'D', 'THETA': 'E', 'PHI': 'F'}
     AXIS_GANTRY_SLAVE = 'B'
     ALL_AXES = ALL_AXES_PHYSICAL
@@ -146,8 +173,7 @@ class RobotController:
         self.driver.send_cmd(f"ST{self.ALL_AXES}")
 
     def _to_steps(self, axis_name, value):
-        ratio = self.config.getfloat('RATIOS', axis_name.lower())
-        return int(value * ratio)
+        return int(value * self.config.getfloat('RATIOS', axis_name.lower()))
 
     def _from_steps(self, axis_name, steps):
         ratio = self.config.getfloat('RATIOS', axis_name.lower())
@@ -161,16 +187,14 @@ class RobotController:
             self._calculate_capsule_position()
             return self.robot_pos
         self.logger.warning("Impossible de mettre à jour les positions (réponse nulle du driver).")
-        return None  # Important de retourner None si la lecture échoue
+        return None
 
     def _calculate_capsule_position(self):
         x_r, y_r, z_r = self.robot_pos['X'], self.robot_pos['Y'], self.robot_pos['Z']
         theta_rad, phi_rad = math.radians(self.robot_pos['THETA']), math.radians(self.robot_pos['PHI'])
         offsets = self.config['OFFSETS']
-        corr_t_x = offsets.getfloat('correction_theta_x')
-        corr_t_y = offsets.getfloat('correction_theta_y')
-        corr_t_z = offsets.getfloat('correction_theta_z')
-        corr_p_l = offsets.getfloat('correction_phi_l')
+        corr_t_x, corr_t_y, corr_t_z, corr_p_l = offsets.getfloat('correction_theta_x'), offsets.getfloat(
+            'correction_theta_y'), offsets.getfloat('correction_theta_z'), offsets.getfloat('correction_phi_l')
         ct, st, cp, sp = math.cos(theta_rad), math.sin(theta_rad), math.cos(phi_rad), math.sin(phi_rad)
         x_p = x_r + (corr_t_x * ct) - (corr_t_y * st)
         y_p = y_r + (corr_t_x * st) + (corr_t_y * ct)
@@ -208,67 +232,39 @@ class RobotController:
         self.update_positions()
 
     def set_parking(self):
-        """
-        Met à jour l'objet de configuration en mémoire avec la position de parking ACTUELLE.
-        NOTE : La position doit être à jour avant d'appeler cette méthode (via update_positions).
-        """
         self.logger.info("Mise à jour de la configuration de parking en mémoire avec la position actuelle.")
-        if not self.config.has_section('ROBOT_POSITIONS'):
-            self.config.add_section('ROBOT_POSITIONS')
-
-        if not self.robot_pos:
-            self.logger.warning("robot_pos est vide. Appelez update_positions() avant set_parking().")
-            return
-
+        if not self.config.has_section('ROBOT_POSITIONS'): self.config.add_section('ROBOT_POSITIONS')
+        if not self.robot_pos: self.logger.warning(
+            "robot_pos est vide. Appelez update_positions() avant set_parking()."); return
         for axis_name, position in self.robot_pos.items():
             config_key = f"parking_{axis_name.lower()}"
             self.config.set('ROBOT_POSITIONS', config_key, f"{position:.4f}")
-            self.logger.debug(f"Parking {axis_name} défini à {position:.2f}")
 
     def go_to_parking(self):
-        """Se déplace vers la position de parking enregistrée."""
         self.logger.info("Déplacement vers la position de parking...")
         try:
-            parking_coords = {
-                'X': self.config.getfloat('ROBOT_POSITIONS', 'parking_x'),
-                'Y': self.config.getfloat('ROBOT_POSITIONS', 'parking_y'),
-                'Z': self.config.getfloat('ROBOT_POSITIONS', 'parking_z'),
-                'THETA': self.config.getfloat('ROBOT_POSITIONS', 'parking_theta'),
-                'PHI': self.config.getfloat('ROBOT_POSITIONS', 'parking_phi'),
-            }
+            parking_coords = {'X': self.config.getfloat('ROBOT_POSITIONS', 'parking_x'),
+                              'Y': self.config.getfloat('ROBOT_POSITIONS', 'parking_y'),
+                              'Z': self.config.getfloat('ROBOT_POSITIONS', 'parking_z'),
+                              'THETA': self.config.getfloat('ROBOT_POSITIONS', 'parking_theta'),
+                              'PHI': self.config.getfloat('ROBOT_POSITIONS', 'parking_phi'), }
             self.logger.info(f"Cible Parking: {parking_coords}")
             self.move_to(**parking_coords)
             self.logger.info("Position de parking atteinte.")
         except (configparser.NoSectionError, configparser.NoOptionError) as e:
-            self.logger.error(f"Position de parking non définie ou incomplète dans config.ini. Erreur: {e}")
+            self.logger.error(f"Position de parking non définie ou incomplète. Erreur: {e}")
         except Exception as e:
             self.logger.error(f"Erreur lors du déplacement vers le parking: {e}")
 
-    # --- NOUVELLE MÉTHODE ---
     def move_relative(self, **kwargs):
-        """
-        Déplace un ou plusieurs axes d'une distance relative par rapport à leur position actuelle.
-        Exemple: move_relative(X=10, Z=-5)
-        """
-        if not kwargs:
-            self.logger.warning("move_relative appelé sans arguments.")
-            return
-
-        # S'assurer que la position actuelle est connue
+        if not kwargs: self.logger.warning("move_relative appelé sans arguments."); return
         self.update_positions()
-
-        # Copier la position actuelle pour ne pas la modifier directement
         target_coords = self.robot_pos.copy()
-
-        axes_to_move_str = ""
         for axis, distance in kwargs.items():
             axis_upper = axis.upper()
             if axis_upper in target_coords:
-                # Calculer la nouvelle position cible
                 target_coords[axis_upper] += float(distance)
-                axes_to_move_str += self.AXIS_MAPPING[axis_upper]
             else:
                 self.logger.warning(f"Axe inconnu dans move_relative : {axis}")
-
         self.logger.info(f"Déplacement relatif vers les coordonnées cibles : {target_coords}")
         self.move_to(**target_coords)
