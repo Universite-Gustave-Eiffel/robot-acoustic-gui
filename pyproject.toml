@@ -18,6 +18,7 @@ dependencies = [
     "pyserial",
     "pygame",
     "configparser",
+    "PySide6",
 ]
 
 [project.optional-dependencies]

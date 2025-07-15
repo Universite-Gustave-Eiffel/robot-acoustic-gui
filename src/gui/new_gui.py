@@ -17,135 +17,11 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QIcon, QFont, QAction, QCloseEvent, QColor, QPixmap
 from PySide6.QtCore import Qt, QSize, Slot, QCoreApplication
 
+# Imports des modules de l'application
 from src.main_controller import MainController
-
-
-class ResourceManager:
-    BASE_DIR = Path(__file__).resolve().parent
-    ICONS_DIR = BASE_DIR / 'new_icons'
-
-    @classmethod
-    def get_icon_path(cls, icon_name: str) -> str:
-        path = cls.ICONS_DIR / icon_name
-        if not path.is_file():
-            print(f"Avertissement : Icône non trouvée à {path}")
-            return ""
-        return str(path)
-
-    @classmethod
-    def get_pixmap(cls, pixmap_name: str) -> QPixmap:
-        path = str(cls.ICONS_DIR / pixmap_name)
-        pixmap = QPixmap(path)
-        if pixmap.isNull():
-            print(f"Avertissement : Image pour splash screen non trouvée à {path}")
-        return pixmap
-
-
-class TelecommandeWindow(QMainWindow):
-    # --- Contenu de la classe TelecommandeWindow (inchangé) ---
-    def __init__(self, controller: MainController, parent=None):
-        super().__init__(parent)
-        self.controller = controller
-        self.setWindowTitle('Télécommande du robot')
-        self.setWindowIcon(QIcon(ResourceManager.get_icon_path('joystick.png')))
-        self.setGeometry(200, 200, 650, 400)
-        self._actions = {}
-        self._create_ui()
-        self.controller.robot_position_updated.connect(self.update_position_display)
-
-    def _create_ui(self):
-        self._create_actions_and_menus()
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
-        self.position_panel = self._create_position_display_panel()
-        main_layout.addWidget(self.position_panel)
-        self.control_panel = self._create_relative_control_panel()
-        main_layout.addWidget(self.control_panel)
-
-    def _create_actions_and_menus(self):
-        self.set_zero_action = QAction(QIcon(ResourceManager.get_icon_path('set_zero.png')), "Définir Zéro", self)
-        self.set_zero_action.triggered.connect(self.controller.set_robot_zero_position)
-        self.set_parking_action = QAction(QIcon(ResourceManager.get_icon_path('parking.png')), "Définir Parking", self)
-        self.set_parking_action.triggered.connect(self.controller.set_robot_parking_position)
-        menu_bar = self.menuBar()
-        menu_ref = menu_bar.addMenu("&Points de Références")
-        menu_ref.addAction(self.set_zero_action)
-        menu_ref.addAction(self.set_parking_action)
-
-    def _create_frame_with_title(self, title_text: str) -> (QFrame, QVBoxLayout):
-        frame = QFrame()
-        frame.setFrameShape(QFrame.StyledPanel)
-        frame.setFrameShadow(QFrame.Raised)
-        layout = QVBoxLayout(frame)
-        title_label = QLabel(title_text)
-        title_label.setStyleSheet("font-weight: bold; font-size: 14px; margin-bottom: 5px;")
-        layout.addWidget(title_label)
-        return frame, layout
-
-    def _create_position_display_panel(self) -> QWidget:
-        frame, layout = self._create_frame_with_title("Position Actuelle")
-        grid = QGridLayout()
-        layout.addLayout(grid)
-        headers = ["", "X (mm)", "Y (mm)", "Z (mm)", "Theta (°)", "Phi (°)"]
-        for i, header_text in enumerate(headers): grid.addWidget(QLabel(f"<b>{header_text}</b>"), 0, i)
-        grid.addWidget(QLabel("<b>Robot:</b>"), 1, 0)
-        self.pos_robot_x = QLineEdit("N/C")
-        self.pos_robot_x.setReadOnly(True)
-        self.pos_robot_y = QLineEdit("N/C")
-        self.pos_robot_y.setReadOnly(True)
-        self.pos_robot_z = QLineEdit("N/C")
-        self.pos_robot_z.setReadOnly(True)
-        self.pos_robot_theta = QLineEdit("N/C")
-        self.pos_robot_theta.setReadOnly(True)
-        self.pos_robot_phi = QLineEdit("N/C")
-        self.pos_robot_phi.setReadOnly(True)
-        grid.addWidget(self.pos_robot_x, 1, 1)
-        grid.addWidget(self.pos_robot_y, 1, 2)
-        grid.addWidget(self.pos_robot_z, 1, 3)
-        grid.addWidget(self.pos_robot_theta, 1, 4)
-        grid.addWidget(self.pos_robot_phi, 1, 5)
-        return frame
-
-    def _create_relative_control_panel(self) -> QWidget:
-        frame, layout = self._create_frame_with_title("Déplacements Relatifs (pas-à-pas)")
-        grid = QGridLayout()
-        layout.addLayout(grid)
-        self.spin_boxes = {}
-        axes = ["X", "Y", "Z", "THETA", "PHI"]
-        for i, axis in enumerate(axes):
-            label = QLabel(f"<b>{axis}:</b>")
-            btn_minus = QPushButton(f"-")
-            btn_minus.setFixedWidth(40)
-            btn_minus.clicked.connect(
-                lambda checked=False, ax=axis, sign=-1: self.controller.move_robot_relative(ax.lower(),
-                                                                                            sign * self.spin_boxes[
-                                                                                                ax].value()))
-            spin_box = QSpinBox()
-            spin_box.setRange(1, 1000)
-            spin_box.setValue(10)
-            spin_box.setSuffix(" U")
-            self.spin_boxes[axis] = spin_box
-            btn_plus = QPushButton(f"+")
-            btn_plus.setFixedWidth(40)
-            btn_plus.clicked.connect(
-                lambda checked=False, ax=axis, sign=1: self.controller.move_robot_relative(ax.lower(),
-                                                                                           sign * self.spin_boxes[
-                                                                                               ax].value()))
-            grid.addWidget(label, i, 0)
-            grid.addWidget(btn_minus, i, 1)
-            grid.addWidget(spin_box, i, 2)
-            grid.addWidget(btn_plus, i, 3)
-        grid.setColumnStretch(4, 1)
-        return frame
-
-    @Slot(dict)
-    def update_position_display(self, positions: dict):
-        self.pos_robot_x.setText(f"{positions.get('X', 0):.3f}")
-        self.pos_robot_y.setText(f"{positions.get('Y', 0):.3f}")
-        self.pos_robot_z.setText(f"{positions.get('Z', 0):.3f}")
-        self.pos_robot_theta.setText(f"{positions.get('THETA', 0):.3f}")
-        self.pos_robot_phi.setText(f"{positions.get('PHI', 0):.3f}")
+from src.gui.config_window import ConfigWindow
+from src.gui.telecommande_window import TelecommandeWindow
+from src.gui.resource_manager import ResourceManager
 
 
 class MainWindow(QMainWindow):
@@ -170,6 +46,8 @@ class MainWindow(QMainWindow):
 
         splash.showMessage("Connexions finales...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
         self.controller.log_message_sent.connect(self.update_status_bar)
+        # La connexion pour la position du robot est gérée par la fenêtre Telecommande elle-même.
+        # self.controller.robot_position_updated.connect(...) est donc inutile ici.
         self.controller.point_list_changed.connect(self.update_points_table)
         self.controller.document_modified_status_changed.connect(self.update_save_action_state)
         self.controller.sequence_status_changed.connect(self.update_status_bar)
@@ -198,6 +76,8 @@ class MainWindow(QMainWindow):
 
     def _create_actions_and_connections(self) -> None:
         self._add_action('quitter', 'exit.png', '&Quitter', "Quitter l'application", 'Ctrl+Q', self.close)
+        self._add_action('config', 'settings.png', 'Configuration...', "Configurer l'application",
+                         slot=self._open_config_window)
         self._add_action('ouvrir', 'load_file.png', '&Ouvrir...', "Ouvrir une liste de points",
                          slot=self._open_point_file_dialog)
         self._add_action('enregistrer', 'save_file.png', '&Enregistrer', "Enregistrer la liste", 'Ctrl+S',
@@ -220,8 +100,6 @@ class MainWindow(QMainWindow):
                          slot=self._on_start_sequence_triggered)
         self._add_action('stop_sequence', 'pause.png', 'Arrêter séquence', "Arrêter la séquence en cours",
                          slot=self.controller.stop_sequence)
-
-        # CORRIGÉ : Ajout du 4ème argument 'tip'
         self._add_action('start_manual_measure', 'start_measurement.png', 'Démarrer mesure manuelle',
                          "Démarrer une mesure PULSE unique", slot=self.controller.start_manual_measurement)
         self._add_action('save_manual_measure', 'save_measurement.png', 'Sauvegarder mesure manuelle',
@@ -236,6 +114,10 @@ class MainWindow(QMainWindow):
         menu_fichier.addAction(self._actions['enregistrer_sous'])
         menu_fichier.addSeparator()
         menu_fichier.addAction(self._actions['quitter'])
+
+        menu_edition = menu_bar.addMenu('&Édition')
+        menu_edition.addAction(self._actions['config'])
+
         menu_outils = menu_bar.addMenu('&Outils')
         menu_outils.addAction(self._actions['telecommande'])
 
@@ -244,6 +126,7 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar_file)
         toolbar_file.addAction(self._actions['ouvrir'])
         toolbar_file.addAction(self._actions['enregistrer'])
+        toolbar_file.addAction(self._actions['config'])
 
         toolbar_sequence = QToolBar("Séquence")
         self.addToolBar(toolbar_sequence)
@@ -437,6 +320,14 @@ class MainWindow(QMainWindow):
         else:
             self.telecommande_window.activateWindow()
             self.telecommande_window.raise_()
+
+    @Slot()
+    def _open_config_window(self):
+        """Ouvre la fenêtre de dialogue de configuration."""
+        config_dialog = ConfigWindow(self.controller, self)
+        config_dialog.exec()
+        # Correction de l'erreur AttributeError
+        self.update_status_bar("Fenêtre de configuration fermée. Redémarrage peut être nécessaire.")
 
     @Slot(str)
     def update_status_bar(self, message: str):

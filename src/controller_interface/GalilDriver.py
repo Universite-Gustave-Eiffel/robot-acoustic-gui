@@ -89,8 +89,13 @@ class GalilDriver:
             response = self.send_cmd(command)
             if response is not None and '?' not in response and response.strip() != '':
                 return response.replace(':', '').strip()
-            self.logger.warning(
-                f"Requête '{command}' a retourné une réponse invalide/vide: '{response}'. Tentative {attempt + 1}/{retries + 1}")
+
+            # Change le niveau de WARNING à INFO pour ce message spécifique
+            # qui est attendu pendant le polling.
+            log_level = logging.WARNING if "MG _BG" not in command else logging.INFO
+            self.logger.log(log_level,
+                            f"Requête '{command}' a retourné une réponse invalide/vide: '{response}'. Tentative {attempt + 1}/{retries + 1}")
+
             if attempt < retries: time.sleep(0.1 + 0.2 * attempt)
         self.logger.error(f"Échec final de la requête '{command}'.")
         return None
@@ -107,15 +112,22 @@ class GalilDriver:
         return None
 
     def wait_motion_complete(self, axes_str, timeout=45.0):
+        """
+        Attend de manière robuste la fin complète d'un mouvement.
+        Combine l'attente du profil (AM) avec une scrutation de l'état physique (_BG).
+        """
         if not self.is_connected or not axes_str: return
         self.logger.info(f"Attente fin de mouvement pour axes: {axes_str} (timeout={timeout}s)...")
 
-        # 1. Envoyer la commande After Motion. Elle se débloquera dès que le profil est terminé.
+        # 1. Envoyer la commande After Motion. Elle attend que le profileur ait fini de générer le mouvement.
+        #    C'est une bonne première attente qui est bloquante côté PC.
         self.send_cmd(f"AM{axes_str}", timeout_override=timeout)
         self.logger.info(f"Profil de mouvement (AM) terminé pour {axes_str}.")
-        time.sleep(10)
 
-        # 2. NOUVEAU : Boucler sur l'opérande _BG pour attendre la stabilisation physique
+        # 2. Courte pause pour laisser le contrôleur se stabiliser après la commande AM.
+        time.sleep(0.1)
+
+        # 3. Boucler sur l'opérande _BGx pour attendre l'arrêt physique de tous les axes.
         start_time = time.time()
         while time.time() - start_time < timeout:
             all_axes_stopped = True
@@ -125,10 +137,10 @@ class GalilDriver:
                     # _BG renvoie 1.0 si en mouvement, 0.0 si à l'arrêt.
                     if response is not None and float(response) != 0:
                         all_axes_stopped = False
-                        break  # Un seul axe en mouvement suffit
+                        break  # Un seul axe en mouvement suffit pour continuer la boucle
                 except (ValueError, TypeError):
                     self.logger.warning(f"Réponse invalide pour _BG{axis}: '{response}'")
-                    all_axes_stopped = False  # Sécurité
+                    all_axes_stopped = False  # Par sécurité, on considère que le mouvement n'est pas fini
                     break
 
             if all_axes_stopped:
@@ -136,9 +148,9 @@ class GalilDriver:
                 time.sleep(0.2)  # Courte pause de stabilisation finale
                 return
 
-            time.sleep(0.1)  # Pause entre les vérifications
+            time.sleep(0.1)  # Pause entre les vérifications pour ne pas surcharger le contrôleur
 
-        self.logger.error(f"Timeout dépassé en attendant l'arrêt physique des axes {axes_str}.")
+        self.logger.error(f"Timeout ({timeout}s) dépassé en attendant l'arrêt physique des axes {axes_str}.")
 
 
 # --- Classe Contrôleur Haut Niveau (inchangée, car la correction est dans le driver) ---

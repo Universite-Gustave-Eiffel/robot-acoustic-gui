@@ -5,7 +5,7 @@ import configparser
 import threading
 import time
 from pathlib import Path
-from PySide6.QtCore import QObject, Signal, QTimer, Slot, QCoreApplication
+from PySide6.QtCore import QObject, Signal, Slot, QCoreApplication, QTimer
 
 from src.labshop_interface.PulseLabshopDriver import PulseLabshopDriver
 from src.controller_interface.GalilDriver import RobotController, GalilDriver
@@ -237,7 +237,6 @@ class MainController(QObject):
 
         self.sequence_thread.active_point_changed.connect(self.highlight_point_in_gui)
         self.sequence_thread.status_changed.connect(self.sequence_status_changed)
-        # CORRIGÉ : Connexion au bon signal
         self.sequence_thread.sequence_completed.connect(self.on_sequence_finished)
 
         base_name = Path(self.current_file_path).stem if self.current_file_path else "mesure_sans_nom"
@@ -256,20 +255,19 @@ class MainController(QObject):
     def on_sequence_finished(self, final_message: str):
         self.log_message_sent.emit(f"Séquence terminée. Statut: {final_message}")
 
-        # CORRIGÉ : Mise à jour du manager AVANT de notifier la GUI
         if self.sequence_thread:
             self.point_manager.points = self.sequence_thread.context['points']
             try:
                 self.sequence_thread.start_measure_requested.disconnect()
                 self.sequence_thread.stop_measure_requested.disconnect()
                 self.sequence_thread.save_measure_requested.disconnect()
-                self.measure_action_completed.disconnect()
+                self.measure_action_completed.disconnect(self.sequence_thread.on_measure_action_completed)
             except RuntimeError as e:
                 self.logger.warning(f"Erreur lors de la déconnexion des signaux : {e}")
 
         self.sequence_thread = None
-        self.pulse_lock.release()
-        # On notifie la GUI que la liste (avec les noms de fichiers) a changé
+        if self.pulse_lock.locked():
+            self.pulse_lock.release()
         self.point_list_changed.emit(self.point_manager.get_points_as_list_of_dicts())
         self.set_document_modified(True)
 
@@ -333,3 +331,24 @@ class MainController(QObject):
         self.log_message_sent.emit(f"Déplacement relatif de {distance} sur l'axe {axis}...")
         with self.robot_lock: self.robot.move_relative(**{axis: distance})
         self.log_message_sent.emit(f"Mouvement relatif terminé sur l'axe {axis}.")
+
+    def save_all_configurations(self):
+        """Sauvegarde les objets de configuration robot et pulse dans leurs fichiers .ini respectifs."""
+        try:
+            if self.config and self.robot_config_path:
+                with open(self.robot_config_path, 'w', encoding='utf-8') as configfile:
+                    self.config.write(configfile)
+                self.logger.info(f"Configuration robot sauvegardée dans {self.robot_config_path}")
+
+            if self.pulse_config:
+                # Reconstruire le chemin du fichier config de pulse
+                controller_file_path = Path(__file__).resolve()
+                pulse_config_path = controller_file_path.parent / 'labshop_interface' / 'config.ini'
+                with open(pulse_config_path, 'w', encoding='utf-8') as configfile:
+                    self.pulse_config.write(configfile)
+                self.logger.info(f"Configuration PULSE sauvegardée dans {pulse_config_path}")
+
+            self.log_message_sent.emit("Configurations sauvegardées avec succès.")
+        except Exception as e:
+            self.logger.error(f"Erreur lors de la sauvegarde des configurations : {e}", exc_info=True)
+            self.log_message_sent.emit(f"ERREUR: Impossible de sauvegarder les configurations: {e}")
