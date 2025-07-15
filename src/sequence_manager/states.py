@@ -33,10 +33,8 @@ class StateMoveToPoint(State):
         robot_lock = context['robot_lock']
         self.logger.info(f"Déplacement vers le point {point_index + 1}: {point}")
 
-        # Le bloc with et l'appel à move_to gèrent l'attente.
-        # move_to est bloquant et ne retourne que lorsque le mouvement est terminé.
         with robot_lock:
-            # CORRIGÉ : L'attente est déjà dans move_to. Pas besoin d'un appel supplémentaire.
+            # L'attente de fin de mouvement est maintenant gérée robustement dans move_to
             self.robot.move_to(x=point.x, y=point.y, z=point.z, theta=point.theta, phi=point.phi)
 
         return StateStartMeasure, context
@@ -52,16 +50,19 @@ class StateStartMeasure(State):
         seq_manager.action_completed_event.clear()
         seq_manager.action_success = False
         seq_manager.start_measure_requested.emit()
-        seq_manager.action_completed_event.wait()
+        seq_manager.action_completed_event.wait()  # Attend juste la confirmation du Lancement
 
         if not seq_manager.action_success:
             return StateError, context
 
-        return StateStopMeasure, context
+        # CORRECTION: On passe à l'attente de la fin de mesure, pas à l'arrêt.
+        return StateWaitForMeasure, context
 
 
+# L'ÉTAT StateStopMeasure n'est plus utilisé par la séquence principale car PULSE s'arrête tout seul.
+# On le laisse au cas où pour une utilisation future, mais on le retire du flux.
 class StateStopMeasure(State):
-    """Demande l'arrêt de la mesure PULSE."""
+    """Demande l'arrêt de la mesure PULSE. (Actuellement non utilisé dans le flux standard)"""
 
     def execute(self, context):
         seq_manager = context['sequence_manager']
@@ -79,22 +80,34 @@ class StateStopMeasure(State):
 
 
 class StateWaitForMeasure(State):
-    """Attend que PULSE confirme que la mesure est bien arrêtée."""
+    """Attend que PULSE confirme que la mesure est bien terminée."""
 
     def execute(self, context):
         seq_manager = context['sequence_manager']
         pulse = seq_manager.pulse
-        timeout = 10
+        # Le timeout doit être supérieur à la durée de mesure configurée dans PULSE
+        timeout = 60  # secondes
         start_time = time.time()
 
-        # On attend simplement que le flag is_measurement_active passe à False
-        # suite aux événements COM traités par le thread principal.
-        while pulse.is_measurement_active:
-            if time.time() - start_time > timeout:
-                raise Exception("Timeout en attendant l'arrêt de la mesure Pulse.")
-            time.sleep(0.1)
+        self.logger.info("Attente de la fin de la mesure par PULSE...")
 
-        self.logger.info("Mesure PULSE confirmée comme étant arrêtée.")
+        # On attend que le flag is_measurement_complete passe à True
+        # suite aux événements COM traités par le thread principal.
+        while not pulse.is_measurement_complete:
+            if not seq_manager._is_running:  # Permet l'arrêt par l'utilisateur
+                self.logger.info("Attente de mesure interrompue.")
+                return StateEnd, context
+
+            if time.time() - start_time > timeout:
+                self.logger.error("Timeout en attendant l'arrêt de la mesure Pulse.")
+                context['error'] = "Timeout en attendant l'arrêt de la mesure Pulse."
+                return StateError, context
+
+            # On laisse le thread dormir un peu pour ne pas consommer 100% du CPU
+            time.sleep(0.1)
+            #self.robot.driver.ser.read_all()  # Garde le port série "vivant"
+
+        self.logger.info("Mesure PULSE confirmée comme étant terminée.")
         return StateSaveMeasure, context
 
 
@@ -106,6 +119,7 @@ class StateSaveMeasure(State):
         point_index = context['current_index']
         base_filename = context.get('base_filename', 'mesure')
 
+        # Création d'un nom de fichier unique pour la mesure
         filename = f"{base_filename}_point_{point_index + 1}.txt"
         self.logger.info(f"Demande de sauvegarde vers '{filename}'")
 
@@ -115,9 +129,11 @@ class StateSaveMeasure(State):
         seq_manager.action_completed_event.wait()
 
         if seq_manager.action_success:
-            context['points'][point_index].measurement_file = filename
+            # message est le nom du fichier si succès
+            context['points'][point_index].measurement_file = seq_manager.action_message
             return StateNextPoint, context
         else:
+            context['error'] = seq_manager.action_message
             return StateError, context
 
 
@@ -148,4 +164,5 @@ class StateError(State):
     def execute(self, context):
         error_message = context.get('error', 'Erreur inconnue dans la séquence.')
         self.logger.error(f"État d'erreur atteint : {error_message}")
+        # Cet état mène à la fin de la séquence
         return StateEnd, context

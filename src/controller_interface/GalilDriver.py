@@ -106,7 +106,6 @@ class GalilDriver:
                 self.logger.error(f"Erreur parsing _TP, réponse: '{response}'")
         return None
 
-    # CORRIGÉ : Implémentation robuste de l'attente de fin de mouvement
     def wait_motion_complete(self, axes_str, timeout=45.0):
         if not self.is_connected or not axes_str: return
         self.logger.info(f"Attente fin de mouvement pour axes: {axes_str} (timeout={timeout}s)...")
@@ -114,6 +113,7 @@ class GalilDriver:
         # 1. Envoyer la commande After Motion. Elle se débloquera dès que le profil est terminé.
         self.send_cmd(f"AM{axes_str}", timeout_override=timeout)
         self.logger.info(f"Profil de mouvement (AM) terminé pour {axes_str}.")
+        time.sleep(10)
 
         # 2. NOUVEAU : Boucler sur l'opérande _BG pour attendre la stabilisation physique
         start_time = time.time()
@@ -122,6 +122,7 @@ class GalilDriver:
             for axis in axes_str:
                 response = self.send_query(f"MG _BG{axis}")
                 try:
+                    # _BG renvoie 1.0 si en mouvement, 0.0 si à l'arrêt.
                     if response is not None and float(response) != 0:
                         all_axes_stopped = False
                         break  # Un seul axe en mouvement suffit
