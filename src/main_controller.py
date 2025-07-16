@@ -141,7 +141,6 @@ class MainController(QObject):
             self.log_message_sent.emit("Robot déconnecté.")
 
     def sync_points_from_gui(self, table_data: list[dict]):
-        """Met à jour le PointManager avec les données actuelles de la GUI."""
         self.point_manager.update_from_list_of_dicts(table_data)
 
     def process_loaded_file(self, file_path: str):
@@ -163,7 +162,6 @@ class MainController(QObject):
         return False
 
     def save_point_list_to_file(self, file_path: str) -> bool:
-        # La synchronisation est faite par le slot appelant (_on_save_triggered)
         if self.point_manager.save_to_file(file_path):
             self.current_file_path = file_path
             self.log_message_sent.emit(f"Fichier '{Path(file_path).name}' sauvegardé.")
@@ -173,7 +171,6 @@ class MainController(QObject):
 
     @Slot()
     def add_new_point(self):
-        # La synchronisation est faite par le slot appelant (_on_add_point_triggered)
         self.point_manager.add_point()
         self._notify_point_list_changed()
 
@@ -215,11 +212,15 @@ class MainController(QObject):
 
     @Slot()
     def start_sequence(self):
-        if self.sequence_thread and self.sequence_thread.isRunning(): self.log_message_sent.emit(
-            "Une séquence est déjà en cours."); return
-        if not self.pulse: self.log_message_sent.emit("ERREUR: Interface PULSE non prête."); return
-        if not self.pulse_lock.acquire(blocking=False): self.log_message_sent.emit(
-            "Interface PULSE occupée par une mesure manuelle."); return
+        if self.sequence_thread and self.sequence_thread.isRunning():
+            self.log_message_sent.emit("Une séquence est déjà en cours.")
+            return
+        if not self.pulse:
+            self.log_message_sent.emit("ERREUR: Interface PULSE non prête.")
+            return
+        if not self.pulse_lock.acquire(blocking=False):
+            self.log_message_sent.emit("Interface PULSE occupée par une mesure manuelle.")
+            return
 
         points = self.point_manager.points
         if not points:
@@ -228,7 +229,15 @@ class MainController(QObject):
             return
 
         self.log_message_sent.emit("Démarrage de la séquence de mesure...")
-        self.sequence_thread = SequenceManager(self.robot, self.pulse, points)
+
+        # NOUVEAU: Récupérer les paramètres de séquence depuis le config
+        sequence_params = {
+            'activer_securite': self.config.getboolean('SEQUENCE', 'activer_securite_deplacement', fallback=True),
+            'hauteur_securite_z': self.config.getfloat('SEQUENCE', 'hauteur_securite_deplacement_z', fallback=20.0),
+            'temps_stabilisation_s': self.config.getfloat('SEQUENCE', 'temps_stabilisation_s', fallback=0.5)
+        }
+
+        self.sequence_thread = SequenceManager(self.robot, self.pulse, points, sequence_params)
 
         self.sequence_thread.start_measure_requested.connect(self._on_start_measure_requested)
         self.sequence_thread.stop_measure_requested.connect(self._on_stop_measure_requested)
@@ -315,7 +324,7 @@ class MainController(QObject):
             self.robot.update_positions()
             self.robot.set_parking()
         try:
-            with open(self.robot_config_path, 'w') as configfile:
+            with open(self.robot_config_path, 'w', encoding='utf-8') as configfile:
                 self.config.write(configfile)
             self.log_message_sent.emit("Nouvelle position de parking sauvegardée.")
         except Exception as e:
@@ -341,7 +350,6 @@ class MainController(QObject):
                 self.logger.info(f"Configuration robot sauvegardée dans {self.robot_config_path}")
 
             if self.pulse_config:
-                # Reconstruire le chemin du fichier config de pulse
                 controller_file_path = Path(__file__).resolve()
                 pulse_config_path = controller_file_path.parent / 'labshop_interface' / 'config.ini'
                 with open(pulse_config_path, 'w', encoding='utf-8') as configfile:

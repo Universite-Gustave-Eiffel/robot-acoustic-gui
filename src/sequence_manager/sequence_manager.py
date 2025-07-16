@@ -1,37 +1,35 @@
 # src/sequence_manager/sequence_manager.py
 import logging
 import threading
-from PySide6.QtCore import QThread, Signal, Slot, QEventLoop
+from PySide6.QtCore import QThread, Signal, Slot
 
-# L'import de PulseLabshopDriver n'est plus nécessaire
-from .states import StateIdle, StateMoveToPoint, StateEnd, StateError, StateNextPoint, StateStartMeasure, \
-    StateStopMeasure, StateSaveMeasure
+# Mise à jour des imports des états
+from .states import StateIdle, StateMoveToPoint, StateEnd, StateError, StateSecurityMove
 
 
 class SequenceManager(QThread):
     """Gère l'exécution d'une séquence de mesure en émettant des signaux pour les actions matérielles."""
 
-    # --- Signaux pour la GUI ---
     status_changed = Signal(str)
     active_point_changed = Signal(int)
-    sequence_completed = Signal(str)  # Signal personnalisé pour la fin
+    sequence_completed = Signal(str)
 
-    # --- Signaux pour le MainController ---
     start_measure_requested = Signal()
     stop_measure_requested = Signal()
     save_measure_requested = Signal(str)
 
-    def __init__(self, robot, pulse, points):
+    def __init__(self, robot, pulse, points, sequence_params):
         super().__init__()
         self.robot = robot
-        self.pulse = pulse  # Garde la référence pour que les états y accèdent
+        self.pulse = pulse
         self.current_state = None
         self.context = {
             'points': points,
             'current_index': 0,
             'robot_lock': None,
             'base_filename': 'mesure',
-            'sequence_manager': self
+            'sequence_manager': self,
+            'sequence_params': sequence_params,  # NOUVEAU: Ajout des paramètres au contexte
         }
         self._is_running = False
         self.logger = logging.getLogger("RobotApp.SequenceManager")
@@ -42,7 +40,6 @@ class SequenceManager(QThread):
 
     @Slot(bool, str)
     def on_measure_action_completed(self, success: bool, message: str):
-        """Slot qui reçoit le résultat d'une action Pulse depuis le MainController."""
         self.action_success = success
         self.action_message = message
         self.action_completed_event.set()
@@ -50,21 +47,31 @@ class SequenceManager(QThread):
     def run(self):
         final_message = "Séquence terminée avec succès."
         self._is_running = True
-        self.current_state = StateMoveToPoint(self.robot)
+
+        # NOUVEAU: Décider de l'état initial en fonction de la sécurité
+        if self.context['sequence_params'].get('activer_securite', False):
+            self.current_state = StateSecurityMove(self.robot)
+        else:
+            self.current_state = StateMoveToPoint(self.robot)
 
         try:
             while self._is_running and not isinstance(self.current_state, StateEnd):
                 point_index = self.context['current_index']
                 total_points = len(self.context['points'])
                 status_message = f"État : {self.current_state.name}"
-                if not isinstance(self.current_state, (StateIdle, StateNextPoint)):
+                if not isinstance(self.current_state, (StateIdle, StateEnd)):
                     status_message += f" | Point : {point_index + 1}/{total_points}"
 
                 self.status_changed.emit(status_message)
-                self.active_point_changed.emit(self.context['current_index'])
+                # On ne surligne le point que s'il est en cours de traitement
+                if "Move" in self.current_state.name or "Measure" in self.current_state.name or "Stabilize" in self.current_state.name:
+                    self.active_point_changed.emit(self.context['current_index'])
+                else:
+                    self.active_point_changed.emit(-1)
 
                 next_state_class, self.context = self.current_state.execute(self.context)
 
+                # Gestion centralisée de l'échec d'une action
                 if not self.action_success and self.current_state.name in ["StateStartMeasure", "StateStopMeasure",
                                                                            "StateSaveMeasure"]:
                     self.context['error'] = self.action_message
@@ -78,20 +85,20 @@ class SequenceManager(QThread):
             self.context['error'] = final_message
             self.current_state = StateError(self.robot)
 
-        if self.current_state and isinstance(self.current_state, StateError):
-            self.current_state.execute(self.context)
+        if isinstance(self.current_state, StateError):
             final_message = self.context.get('error', 'Erreur inconnue')
-
-        if not self._is_running and "error" not in self.context:
+            self.status_changed.emit(f"ERREUR : {final_message}")
+        elif not self._is_running:
             final_message = "Séquence arrêtée par l'utilisateur."
+            self.status_changed.emit(final_message)
+        else:  # Fin normale
+            self.status_changed.emit(final_message)
 
-        self.status_changed.emit(final_message)
         self.active_point_changed.emit(-1)
         self.sequence_completed.emit(final_message)
         self._is_running = False
 
     def stop(self):
-        """Demande l'arrêt de la séquence."""
         self.logger.info("Demande d'arrêt de la séquence.")
         self._is_running = False
         if self.action_completed_event and not self.action_completed_event.is_set():

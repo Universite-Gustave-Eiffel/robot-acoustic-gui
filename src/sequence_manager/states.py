@@ -12,7 +12,6 @@ class State:
         self.logger = logging.getLogger(f"RobotApp.FSM.{self.name}")
 
     def execute(self, context):
-        """Exécute la logique de l'état et retourne la classe du prochain état et le contexte mis à jour."""
         raise NotImplementedError
 
 
@@ -24,19 +23,55 @@ class StateIdle(State):
         return StateIdle, context
 
 
+class StateSecurityMove(State):
+    """Monte le robot à une altitude de sécurité Z."""
+
+    def execute(self, context):
+        hauteur_z = context['sequence_params'].get('hauteur_securite_z', 20.0)
+        self.logger.info(f"Déplacement de sécurité vers Z = {hauteur_z} mm.")
+        with context['robot_lock']:
+            self.robot.move_to(z=hauteur_z)
+
+        # Après le mouvement de sécurité, on va au premier point.
+        return StateMoveToPoint, context
+
+
 class StateMoveToPoint(State):
-    """Déplace le robot vers un point spécifique."""
+    """Déplace le robot vers un point spécifique (X, Y, Theta, Phi), puis Z."""
 
     def execute(self, context):
         point_index = context['current_index']
         point = context['points'][point_index]
         robot_lock = context['robot_lock']
-        self.logger.info(f"Déplacement vers le point {point_index + 1}: {point}")
+        activer_securite = context['sequence_params'].get('activer_securite', False)
 
         with robot_lock:
-            # L'attente de fin de mouvement est maintenant gérée robustement dans move_to
-            self.robot.move_to(x=point.x, y=point.y, z=point.z, theta=point.theta, phi=point.phi)
+            # Si la sécurité n'est pas activée, on va directement aux coordonnées complètes
+            if not activer_securite:
+                self.logger.info(f"Déplacement direct vers le point {point_index + 1}: {point}")
+                self.robot.move_to(x=point.x, y=point.y, z=point.z, theta=point.theta, phi=point.phi)
+            else:
+                # Sinon, mouvement en deux temps: d'abord XY et rotations, puis descente en Z.
+                self.logger.info(f"Déplacement (XY, Rot) vers le point {point_index + 1}")
+                self.robot.move_to(x=point.x, y=point.y, theta=point.theta, phi=point.phi)
 
+                # Petite pause pour s'assurer que le robot est stabilisé en XY avant la descente
+                time.sleep(0.2)
+
+                self.logger.info(f"Descente en Z vers le point {point_index + 1}")
+                self.robot.move_to(z=point.z)
+
+        return StateStabilize, context
+
+
+class StateStabilize(State):
+    """Attend un temps défini pour la stabilisation du robot."""
+
+    def execute(self, context):
+        temps_stabilisation = context['sequence_params'].get('temps_stabilisation_s', 0.5)
+        if temps_stabilisation > 0:
+            self.logger.info(f"Stabilisation pendant {temps_stabilisation} seconde(s)...")
+            time.sleep(temps_stabilisation)
         return StateStartMeasure, context
 
 
@@ -50,30 +85,10 @@ class StateStartMeasure(State):
         seq_manager.action_completed_event.clear()
         seq_manager.action_success = False
         seq_manager.start_measure_requested.emit()
-        seq_manager.action_completed_event.wait()  # Attend juste la confirmation du Lancement
+        seq_manager.action_completed_event.wait(timeout=10)  # Timeout pour éviter un blocage infini
 
         if not seq_manager.action_success:
-            return StateError, context
-
-        # CORRECTION: On passe à l'attente de la fin de mesure, pas à l'arrêt.
-        return StateWaitForMeasure, context
-
-
-# L'ÉTAT StateStopMeasure n'est plus utilisé par la séquence principale car PULSE s'arrête tout seul.
-# On le laisse au cas où pour une utilisation future, mais on le retire du flux.
-class StateStopMeasure(State):
-    """Demande l'arrêt de la mesure PULSE. (Actuellement non utilisé dans le flux standard)"""
-
-    def execute(self, context):
-        seq_manager = context['sequence_manager']
-        self.logger.info("Demande d'arrêt de la mesure.")
-
-        seq_manager.action_completed_event.clear()
-        seq_manager.action_success = False
-        seq_manager.stop_measure_requested.emit()
-        seq_manager.action_completed_event.wait()
-
-        if not seq_manager.action_success:
+            context['error'] = "Échec du démarrage de la mesure PULSE."
             return StateError, context
 
         return StateWaitForMeasure, context
@@ -85,27 +100,23 @@ class StateWaitForMeasure(State):
     def execute(self, context):
         seq_manager = context['sequence_manager']
         pulse = seq_manager.pulse
-        # Le timeout doit être supérieur à la durée de mesure configurée dans PULSE
-        timeout = 60  # secondes
+        timeout = 60
         start_time = time.time()
 
         self.logger.info("Attente de la fin de la mesure par PULSE...")
 
-        # On attend que le flag is_measurement_complete passe à True
-        # suite aux événements COM traités par le thread principal.
         while not pulse.is_measurement_complete:
-            if not seq_manager._is_running:  # Permet l'arrêt par l'utilisateur
+            if not seq_manager._is_running:
                 self.logger.info("Attente de mesure interrompue.")
                 return StateEnd, context
 
             if time.time() - start_time > timeout:
-                self.logger.error("Timeout en attendant l'arrêt de la mesure Pulse.")
-                context['error'] = "Timeout en attendant l'arrêt de la mesure Pulse."
+                msg = "Timeout en attendant la fin de la mesure Pulse."
+                self.logger.error(msg)
+                context['error'] = msg
                 return StateError, context
 
-            # On laisse le thread dormir un peu pour ne pas consommer 100% du CPU
             time.sleep(0.1)
-            #self.robot.driver.ser.read_all()  # Garde le port série "vivant"
 
         self.logger.info("Mesure PULSE confirmée comme étant terminée.")
         return StateSaveMeasure, context
@@ -119,17 +130,15 @@ class StateSaveMeasure(State):
         point_index = context['current_index']
         base_filename = context.get('base_filename', 'mesure')
 
-        # Création d'un nom de fichier unique pour la mesure
-        filename = f"{base_filename}_point_{point_index + 1}.txt"
+        filename = f"{base_filename}_point_{point_index + 1:03d}.txt"
         self.logger.info(f"Demande de sauvegarde vers '{filename}'")
 
         seq_manager.action_completed_event.clear()
         seq_manager.action_success = False
         seq_manager.save_measure_requested.emit(filename)
-        seq_manager.action_completed_event.wait()
+        seq_manager.action_completed_event.wait(timeout=10)
 
         if seq_manager.action_success:
-            # message est le nom du fichier si succès
             context['points'][point_index].measurement_file = seq_manager.action_message
             return StateNextPoint, context
         else:
@@ -142,9 +151,15 @@ class StateNextPoint(State):
 
     def execute(self, context):
         context['current_index'] += 1
+        activer_securite = context['sequence_params'].get('activer_securite', False)
+
         if context['current_index'] < len(context['points']):
             self.logger.info("Passage au point suivant.")
-            return StateMoveToPoint, context
+            # Si la sécurité est activée, on remonte avant d'aller au point suivant.
+            if activer_securite:
+                return StateSecurityMove, context
+            else:
+                return StateMoveToPoint, context
         else:
             self.logger.info("Tous les points ont été mesurés.")
             return StateEnd, context
@@ -164,5 +179,5 @@ class StateError(State):
     def execute(self, context):
         error_message = context.get('error', 'Erreur inconnue dans la séquence.')
         self.logger.error(f"État d'erreur atteint : {error_message}")
-        # Cet état mène à la fin de la séquence
+        # Cet état mène directement à la fin de la séquence
         return StateEnd, context

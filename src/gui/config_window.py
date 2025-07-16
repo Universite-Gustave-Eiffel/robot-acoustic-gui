@@ -6,8 +6,9 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QTabWidget, QWidget, QFormLayout,
     QLineEdit, QDialogButtonBox, QPushButton, QFileDialog,
-    QComboBox, QGroupBox, QMessageBox, QLabel
+    QComboBox, QGroupBox, QMessageBox, QLabel, QScrollArea, QCheckBox
 )
+from PySide6.QtCore import Qt
 
 from src.main_controller import MainController
 
@@ -15,7 +16,7 @@ from src.main_controller import MainController
 class ConfigWindow(QDialog):
     """
     Fenêtre de dialogue pour configurer les paramètres de l'application
-    stockés dans les fichiers .ini.
+    stockés dans les fichiers .ini, avec zone de défilement.
     """
 
     def __init__(self, controller: MainController, parent=None):
@@ -23,34 +24,43 @@ class ConfigWindow(QDialog):
         self.controller = controller
         self.setWindowTitle("Configuration de l'application")
         self.setMinimumWidth(600)
+        self.setMaximumHeight(800)
 
-        # Layout principal
+        self.initial_robot_port = ""
+        self.initial_robot_baudrate = ""
+        self.initial_pulse_project = ""
+
         self.main_layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
         self.main_layout.addWidget(self.tabs)
 
-        # Création des onglets
-        self.robot_tab = QWidget()
-        self.pulse_tab = QWidget()
-        self.tabs.addTab(self.robot_tab, "Configuration Robot")
-        self.tabs.addTab(self.pulse_tab, "Configuration PULSE")
+        self.robot_tab_widget = QWidget()
+        self.pulse_tab_widget = QWidget()
 
-        # Remplissage des onglets avec les widgets
+        self.robot_scroll = QScrollArea()
+        self.robot_scroll.setWidgetResizable(True)
+        self.robot_scroll.setWidget(self.robot_tab_widget)
+
+        self.pulse_scroll = QScrollArea()
+        self.pulse_scroll.setWidgetResizable(True)
+        self.pulse_scroll.setWidget(self.pulse_tab_widget)
+
+        self.tabs.addTab(self.robot_scroll, "Configuration Robot")
+        self.tabs.addTab(self.pulse_scroll, "Configuration PULSE")
+
         self._create_robot_tab()
         self._create_pulse_tab()
 
-        # Boutons OK / Annuler
         self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
         self.main_layout.addWidget(self.button_box)
 
-        # Charger la configuration actuelle dans les widgets
         self._load_config()
 
     def _create_robot_tab(self):
         """Crée le contenu de l'onglet de configuration du robot."""
-        layout = QFormLayout(self.robot_tab)
+        layout = QVBoxLayout(self.robot_tab_widget)
 
         # --- Groupe Connexion Série ---
         serial_group = QGroupBox("Connexion Série")
@@ -64,19 +74,53 @@ class ConfigWindow(QDialog):
         serial_layout.addRow("Timeout (s):", self.robot_timeout)
         layout.addWidget(serial_group)
 
-        # --- Groupe Vitesses ---
-        speeds_group = QGroupBox("Vitesses et Accélérations")
-        speeds_layout = QFormLayout(speeds_group)
-        self.jog_xy = QLineEdit()
-        self.jog_z = QLineEdit()
-        self.jog_rot = QLineEdit()
-        speeds_layout.addRow("Jog XY (mm/s):", self.jog_xy)
-        speeds_layout.addRow("Jog Z (mm/s):", self.jog_z)
-        speeds_layout.addRow("Jog Rotation (°/s):", self.jog_rot)
-        layout.addWidget(speeds_group)
+        # --- Groupe Mouvement et Sécurité ---
+        movement_group = QGroupBox("Mouvement et Parking")
+        movement_layout = QFormLayout(movement_group)
+        self.parking_x = QLineEdit()
+        self.parking_y = QLineEdit()
+        self.parking_z = QLineEdit()
+        self.parking_theta = QLineEdit()
+        self.parking_phi = QLineEdit()
+        movement_layout.addRow("Parking X (mm):", self.parking_x)
+        movement_layout.addRow("Parking Y (mm):", self.parking_y)
+        movement_layout.addRow("Parking Z (mm):", self.parking_z)
+        movement_layout.addRow("Parking Theta (°):", self.parking_theta)
+        movement_layout.addRow("Parking Phi (°):", self.parking_phi)
+        layout.addWidget(movement_group)
 
-        # --- NOUVEAU : Groupe Corrections de position ---
-        offsets_group = QGroupBox("Corrections de position (cinématique capsule)")
+        # --- Groupe Paramètres de Séquence ---
+        sequence_group = QGroupBox("Paramètres de Séquence")
+        sequence_layout = QFormLayout(sequence_group)
+        self.seq_activer_securite = QCheckBox()
+        self.seq_hauteur_securite = QLineEdit()
+        self.seq_temps_stabilisation = QLineEdit()
+        sequence_layout.addRow("Activer la sécurité de déplacement :", self.seq_activer_securite)
+        sequence_layout.addRow("Hauteur de sécurité (axe Z, en mm) :", self.seq_hauteur_securite)
+        sequence_layout.addRow("Temps de stabilisation sur position (s) :", self.seq_temps_stabilisation)
+        layout.addWidget(sequence_group)
+
+        # --- Groupe Calibration et Dynamique ---
+        calib_group = QGroupBox("Calibration et Dynamique")
+        calib_layout = QFormLayout(calib_group)
+        self.ratio_x = QLineEdit()
+        self.ratio_y = QLineEdit()
+        self.ratio_z = QLineEdit()
+        self.ratio_theta = QLineEdit()
+        self.ratio_phi = QLineEdit()
+        self.accel = QLineEdit()
+        self.decel = QLineEdit()
+        calib_layout.addRow("Ratio X (pas/mm):", self.ratio_x)
+        calib_layout.addRow("Ratio Y (pas/mm):", self.ratio_y)
+        calib_layout.addRow("Ratio Z (pas/mm):", self.ratio_z)
+        calib_layout.addRow("Ratio Theta (pas/°):", self.ratio_theta)
+        calib_layout.addRow("Ratio Phi (pas/°):", self.ratio_phi)
+        calib_layout.addRow("Accélération (pas/s²):", self.accel)
+        calib_layout.addRow("Décélération (pas/s²):", self.decel)
+        layout.addWidget(calib_group)
+
+        # --- Groupe Corrections Géométriques ---
+        offsets_group = QGroupBox("Corrections Géométriques (Cinématique Capsule)")
         offsets_layout = QFormLayout(offsets_group)
         self.corr_theta_x = QLineEdit()
         self.corr_theta_y = QLineEdit()
@@ -88,15 +132,14 @@ class ConfigWindow(QDialog):
         offsets_layout.addRow("Correction Phi L (mm):", self.corr_phi_l)
         layout.addWidget(offsets_group)
 
-    def _create_pulse_tab(self):
-        """Crée le contenu de l'onglet de configuration de PULSE."""
-        layout = QFormLayout(self.pulse_tab)
+        layout.addStretch()
 
-        # --- Groupe Chemins d'accès ---
+    def _create_pulse_tab(self):
+        layout = QFormLayout(self.pulse_tab_widget)
+
         paths_group = QGroupBox("Chemins d'accès PULSE")
         paths_layout = QFormLayout(paths_group)
 
-        # Création des sélecteurs de fichiers/dossiers
         self.pulse_project_path_edit, self.pulse_project_path_btn = self._create_path_selector(
             is_dir=False, file_filter="Projet PULSE (*.pls)"
         )
@@ -117,7 +160,6 @@ class ConfigWindow(QDialog):
         layout.addWidget(paths_group)
 
     def _create_path_selector(self, is_dir=False, file_filter="Tous les fichiers (*)"):
-        """Fonction utilitaire pour créer un QLineEdit avec un bouton 'Parcourir...'."""
         line_edit = QLineEdit()
         browse_button = QPushButton("Parcourir...")
 
@@ -133,76 +175,114 @@ class ConfigWindow(QDialog):
         return line_edit, browse_button
 
     def _load_config(self):
-        """Charge la configuration actuelle depuis le controller dans les widgets."""
-        # Config Robot
         if self.controller.config:
-            # SERIAL
-            self.robot_port.setText(self.controller.config.get('SERIAL', 'port', fallback=""))
-            self.robot_baudrate.setCurrentText(self.controller.config.get('SERIAL', 'baudrate', fallback="38400"))
-            self.robot_timeout.setText(self.controller.config.get('SERIAL', 'timeout', fallback="0.5"))
-            # SPEEDS
-            self.jog_xy.setText(self.controller.config.get('ROBOT_SPEEDS', 'jog_xy_mm_s', fallback=""))
-            self.jog_z.setText(self.controller.config.get('ROBOT_SPEEDS', 'jog_z_mm_s', fallback=""))
-            self.jog_rot.setText(self.controller.config.get('ROBOT_SPEEDS', 'jog_rot_deg_s', fallback=""))
-            # NOUVEAU : OFFSETS
-            self.corr_theta_x.setText(self.controller.config.get('OFFSETS', 'correction_theta_x', fallback=""))
-            self.corr_theta_y.setText(self.controller.config.get('OFFSETS', 'correction_theta_y', fallback=""))
-            self.corr_theta_z.setText(self.controller.config.get('OFFSETS', 'correction_theta_z', fallback=""))
-            self.corr_phi_l.setText(self.controller.config.get('OFFSETS', 'correction_phi_l', fallback=""))
+            cfg = self.controller.config
+            self.initial_robot_port = cfg.get('SERIAL', 'port', fallback="")
+            self.initial_robot_baudrate = cfg.get('SERIAL', 'baudrate', fallback="38400")
 
-        # Config PULSE
+            self.robot_port.setText(self.initial_robot_port)
+            self.robot_baudrate.setCurrentText(self.initial_robot_baudrate)
+            self.robot_timeout.setText(cfg.get('SERIAL', 'timeout', fallback="0.5"))
+
+            self.parking_x.setText(cfg.get('ROBOT_POSITIONS', 'parking_x', fallback=""))
+            self.parking_y.setText(cfg.get('ROBOT_POSITIONS', 'parking_y', fallback=""))
+            self.parking_z.setText(cfg.get('ROBOT_POSITIONS', 'parking_z', fallback=""))
+            self.parking_theta.setText(cfg.get('ROBOT_POSITIONS', 'parking_theta', fallback=""))
+            self.parking_phi.setText(cfg.get('ROBOT_POSITIONS', 'parking_phi', fallback=""))
+
+            self.seq_activer_securite.setChecked(
+                cfg.getboolean('SEQUENCE', 'activer_securite_deplacement', fallback=True))
+            self.seq_hauteur_securite.setText(cfg.get('SEQUENCE', 'hauteur_securite_deplacement_z', fallback="20.0"))
+            self.seq_temps_stabilisation.setText(cfg.get('SEQUENCE', 'temps_stabilisation_s', fallback="0.5"))
+
+            self.ratio_x.setText(cfg.get('RATIOS', 'x', fallback=""))
+            self.ratio_y.setText(cfg.get('RATIOS', 'y', fallback=""))
+            self.ratio_z.setText(cfg.get('RATIOS', 'z', fallback=""))
+            self.ratio_theta.setText(cfg.get('RATIOS', 'theta', fallback=""))
+            self.ratio_phi.setText(cfg.get('RATIOS', 'phi', fallback=""))
+
+            self.accel.setText(cfg.get('ROBOT_SPEEDS', 'accel_steps_s2', fallback=""))
+            self.decel.setText(cfg.get('ROBOT_SPEEDS', 'decel_steps_s2', fallback=""))
+
+            self.corr_theta_x.setText(cfg.get('OFFSETS', 'correction_theta_x', fallback=""))
+            self.corr_theta_y.setText(cfg.get('OFFSETS', 'correction_theta_y', fallback=""))
+            self.corr_theta_z.setText(cfg.get('OFFSETS', 'correction_theta_z', fallback=""))
+            self.corr_phi_l.setText(cfg.get('OFFSETS', 'correction_phi_l', fallback=""))
+
         if self.controller.pulse_config:
-            self.pulse_project_path_edit.setText(
-                self.controller.pulse_config.get('PulseSettings', 'project_path', fallback=""))
-            self.pulse_save_dir_edit.setText(
-                self.controller.pulse_config.get('PulseSettings', 'save_path_dir', fallback=""))
-            self.pulse_log_dir_edit.setText(self.controller.pulse_config.get('PulseSettings', 'log_dir', fallback=""))
-            self.pulse_fg_name.setText(
-                self.controller.pulse_config.get('PulseSettings', 'function_group_to_save', fallback=""))
+            p_cfg = self.controller.pulse_config
+            self.initial_pulse_project = p_cfg.get('PulseSettings', 'project_path', fallback="")
 
-    def _save_config(self):
-        """Sauvegarde les valeurs des widgets dans les objets de configuration du controller."""
+            self.pulse_project_path_edit.setText(self.initial_pulse_project)
+            self.pulse_save_dir_edit.setText(p_cfg.get('PulseSettings', 'save_path_dir', fallback=""))
+            self.pulse_log_dir_edit.setText(p_cfg.get('PulseSettings', 'log_dir', fallback=""))
+            self.pulse_fg_name.setText(p_cfg.get('PulseSettings', 'function_group_to_save', fallback=""))
+
+    def _ensure_sections(self, cfg, sections):
+        for section in sections:
+            if not cfg.has_section(section):
+                cfg.add_section(section)
+
+    def _save_config(self) -> bool:
+        restart_needed = False
+        if self.robot_port.text() != self.initial_robot_port or \
+                self.robot_baudrate.currentText() != self.initial_robot_baudrate or \
+                self.pulse_project_path_edit.text() != self.initial_pulse_project:
+            restart_needed = True
+
         try:
-            # Config Robot
             robot_cfg = self.controller.config
             if not robot_cfg: robot_cfg = configparser.ConfigParser()
-            if not robot_cfg.has_section('SERIAL'): robot_cfg.add_section('SERIAL')
-            if not robot_cfg.has_section('ROBOT_SPEEDS'): robot_cfg.add_section('ROBOT_SPEEDS')
-            if not robot_cfg.has_section('OFFSETS'): robot_cfg.add_section('OFFSETS')  # NOUVEAU
+            self._ensure_sections(robot_cfg,
+                                  ['SERIAL', 'ROBOT_POSITIONS', 'SEQUENCE', 'RATIOS', 'ROBOT_SPEEDS', 'OFFSETS'])
 
             robot_cfg.set('SERIAL', 'port', self.robot_port.text())
             robot_cfg.set('SERIAL', 'baudrate', self.robot_baudrate.currentText())
             robot_cfg.set('SERIAL', 'timeout', self.robot_timeout.text())
-            robot_cfg.set('ROBOT_SPEEDS', 'jog_xy_mm_s', self.jog_xy.text())
-            robot_cfg.set('ROBOT_SPEEDS', 'jog_z_mm_s', self.jog_z.text())
-            robot_cfg.set('ROBOT_SPEEDS', 'jog_rot_deg_s', self.jog_rot.text())
-            # NOUVEAU
+            robot_cfg.set('ROBOT_POSITIONS', 'parking_x', self.parking_x.text())
+            robot_cfg.set('ROBOT_POSITIONS', 'parking_y', self.parking_y.text())
+            robot_cfg.set('ROBOT_POSITIONS', 'parking_z', self.parking_z.text())
+            robot_cfg.set('ROBOT_POSITIONS', 'parking_theta', self.parking_theta.text())
+            robot_cfg.set('ROBOT_POSITIONS', 'parking_phi', self.parking_phi.text())
+            robot_cfg.set('SEQUENCE', 'activer_securite_deplacement',
+                          'yes' if self.seq_activer_securite.isChecked() else 'no')
+            robot_cfg.set('SEQUENCE', 'hauteur_securite_deplacement_z', self.seq_hauteur_securite.text())
+            robot_cfg.set('SEQUENCE', 'temps_stabilisation_s', self.seq_temps_stabilisation.text())
+            robot_cfg.set('RATIOS', 'x', self.ratio_x.text())
+            robot_cfg.set('RATIOS', 'y', self.ratio_y.text())
+            robot_cfg.set('RATIOS', 'z', self.ratio_z.text())
+            robot_cfg.set('RATIOS', 'theta', self.ratio_theta.text())
+            robot_cfg.set('RATIOS', 'phi', self.ratio_phi.text())
+            robot_cfg.set('ROBOT_SPEEDS', 'accel_steps_s2', self.accel.text())
+            robot_cfg.set('ROBOT_SPEEDS', 'decel_steps_s2', self.decel.text())
             robot_cfg.set('OFFSETS', 'correction_theta_x', self.corr_theta_x.text())
             robot_cfg.set('OFFSETS', 'correction_theta_y', self.corr_theta_y.text())
             robot_cfg.set('OFFSETS', 'correction_theta_z', self.corr_theta_z.text())
             robot_cfg.set('OFFSETS', 'correction_phi_l', self.corr_phi_l.text())
 
-            # Config PULSE
             pulse_cfg = self.controller.pulse_config
             if not pulse_cfg: pulse_cfg = configparser.ConfigParser()
-            if not pulse_cfg.has_section('PulseSettings'): pulse_cfg.add_section('PulseSettings')
+            self._ensure_sections(pulse_cfg, ['PulseSettings'])
 
             pulse_cfg.set('PulseSettings', 'project_path', self.pulse_project_path_edit.text())
             pulse_cfg.set('PulseSettings', 'save_path_dir', self.pulse_save_dir_edit.text())
             pulse_cfg.set('PulseSettings', 'log_dir', self.pulse_log_dir_edit.text())
             pulse_cfg.set('PulseSettings', 'function_group_to_save', self.pulse_fg_name.text())
 
-            # Appeler le controller pour écrire les fichiers sur le disque
             self.controller.save_all_configurations()
 
-            QMessageBox.information(self, "Succès",
-                                    "Configuration sauvegardée.\nCertaines modifications nécessiteront un redémarrage de l'application.")
+            if restart_needed:
+                QMessageBox.warning(self, "Redémarrage nécessaire",
+                                    "Configuration sauvegardée.\n\nCertaines modifications (port, baudrate, projet PULSE) nécessitent un redémarrage complet de l'application pour être prises en compte.")
+            else:
+                QMessageBox.information(self, "Succès",
+                                        "Configuration sauvegardée.\nLes modifications ont été appliquées.")
+
             return True
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible de sauvegarder la configuration : {e}")
             return False
 
     def accept(self):
-        """S'exécute lorsque l'utilisateur clique sur OK."""
         if self._save_config():
             super().accept()
