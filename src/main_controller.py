@@ -9,7 +9,7 @@ from PySide6.QtCore import QObject, Signal, Slot, QCoreApplication, QTimer
 
 from src.labshop_interface.PulseLabshopDriver import PulseLabshopDriver
 from src.controller_interface.GalilDriver import RobotController, GalilDriver
-from src.data_manager import PointManager
+from src.data_manager import PointManager, Point
 from src.sequence_manager.sequence_manager import SequenceManager
 
 
@@ -29,6 +29,8 @@ class MainController(QObject):
 
     log_message_sent = Signal(str)
     robot_position_updated = Signal(dict)
+    robot_coords_calculated = Signal(dict)
+
     point_list_changed = Signal(list)
     document_modified_status_changed = Signal(bool)
     sequence_status_changed = Signal(str)
@@ -43,7 +45,7 @@ class MainController(QObject):
         self.current_file_path = None
         self._is_modified = False
 
-        self.robot = None
+        self.robot: RobotController | None = None
         self.config = None
         self.robot_config_path = None
 
@@ -115,7 +117,8 @@ class MainController(QObject):
             if self.robot_lock.acquire(blocking=False):
                 try:
                     positions = self.robot.update_positions()
-                    if positions: self.robot_position_updated.emit(positions)
+                    if positions:
+                        self.robot_position_updated.emit(positions)
                 finally:
                     self.robot_lock.release()
 
@@ -141,6 +144,7 @@ class MainController(QObject):
             self.log_message_sent.emit("Robot déconnecté.")
 
     def sync_points_from_gui(self, table_data: list[dict]):
+        """Met à jour le PointManager avec les données actuelles de la GUI."""
         self.point_manager.update_from_list_of_dicts(table_data)
 
     def process_loaded_file(self, file_path: str):
@@ -173,6 +177,29 @@ class MainController(QObject):
     def add_new_point(self):
         self.point_manager.add_point()
         self._notify_point_list_changed()
+
+    @Slot()
+    def add_current_position_as_point(self):
+        if not self.robot: return
+        with self.robot_lock:
+            current_pos = self.robot.last_positions
+            if not any(current_pos.values()):  # Si toutes les positions sont à 0, elles n'ont peut-être pas été lues
+                current_pos = self.robot.update_positions()
+
+            if not current_pos:
+                self.log_message_sent.emit("Position actuelle du robot inconnue.")
+                return
+
+            new_point = Point(
+                x=current_pos.get('X', 0.0),
+                y=current_pos.get('Y', 0.0),
+                z=current_pos.get('Z', 0.0),
+                theta=current_pos.get('THETA', 0.0),
+                phi=current_pos.get('PHI', 0.0),
+            )
+        self.point_manager.add_point(new_point)
+        self._notify_point_list_changed()
+        self.log_message_sent.emit("Position actuelle ajoutée à la liste de points.")
 
     @Slot(list)
     def delete_selected_points(self, indices: list[int]):
@@ -212,15 +239,11 @@ class MainController(QObject):
 
     @Slot()
     def start_sequence(self):
-        if self.sequence_thread and self.sequence_thread.isRunning():
-            self.log_message_sent.emit("Une séquence est déjà en cours.")
-            return
-        if not self.pulse:
-            self.log_message_sent.emit("ERREUR: Interface PULSE non prête.")
-            return
-        if not self.pulse_lock.acquire(blocking=False):
-            self.log_message_sent.emit("Interface PULSE occupée par une mesure manuelle.")
-            return
+        if self.sequence_thread and self.sequence_thread.isRunning(): self.log_message_sent.emit(
+            "Une séquence est déjà en cours."); return
+        if not self.pulse: self.log_message_sent.emit("ERREUR: Interface PULSE non prête."); return
+        if not self.pulse_lock.acquire(blocking=False): self.log_message_sent.emit(
+            "Interface PULSE occupée par une mesure manuelle."); return
 
         points = self.point_manager.points
         if not points:
@@ -229,14 +252,11 @@ class MainController(QObject):
             return
 
         self.log_message_sent.emit("Démarrage de la séquence de mesure...")
-
-        # NOUVEAU: Récupérer les paramètres de séquence depuis le config
         sequence_params = {
             'activer_securite': self.config.getboolean('SEQUENCE', 'activer_securite_deplacement', fallback=True),
             'hauteur_securite_z': self.config.getfloat('SEQUENCE', 'hauteur_securite_deplacement_z', fallback=20.0),
             'temps_stabilisation_s': self.config.getfloat('SEQUENCE', 'temps_stabilisation_s', fallback=0.5)
         }
-
         self.sequence_thread = SequenceManager(self.robot, self.pulse, points, sequence_params)
 
         self.sequence_thread.start_measure_requested.connect(self._on_start_measure_requested)
@@ -312,10 +332,42 @@ class MainController(QObject):
         finally:
             if self.pulse_lock.locked(): self.pulse_lock.release()
 
+    @Slot(dict)
+    def calculate_robot_coords(self, capsule_coords: dict):
+        if not self.robot: return
+        try:
+            robot_coords = self.robot.calculate_robot_coords_for_capsule(
+                capsule_x=capsule_coords['X'],
+                capsule_y=capsule_coords['Y'],
+                capsule_z=capsule_coords['Z'],
+                theta=capsule_coords['THETA'],
+                phi=capsule_coords['PHI'],
+            )
+            self.robot_coords_calculated.emit(robot_coords)
+            self.log_message_sent.emit("Coordonnées robot calculées.")
+        except Exception as e:
+            self.log_message_sent.emit(f"Erreur de calcul cinématique : {e}")
+
+    @Slot(dict)
+    def move_robot_absolute(self, robot_coords: dict):
+        if not self.robot: return
+        valid_coords = {k.upper(): v for k, v in robot_coords.items() if k.upper() in self.robot.AXIS_MAPPING}
+        self.log_message_sent.emit(f"Déplacement absolu vers : {valid_coords}")
+        threading.Thread(target=lambda: self._execute_move_to(valid_coords)).start()
+
+    def _execute_move_to(self, coords):
+        with self.robot_lock:
+            self.robot.move_to(**coords)
+        self.log_message_sent.emit("Déplacement absolu terminé.")
+
     def move_robot_to_parking(self):
         if not self.robot: return
         self.log_message_sent.emit("Déplacement vers la position de parking...")
-        with self.robot_lock: self.robot.go_to_parking()
+        threading.Thread(target=self._execute_move_to_parking).start()
+
+    def _execute_move_to_parking(self):
+        with self.robot_lock:
+            self.robot.go_to_parking()
         self.log_message_sent.emit("Position de parking atteinte.")
 
     def set_robot_parking_position(self):
@@ -335,10 +387,24 @@ class MainController(QObject):
         with self.robot_lock: self.robot.define_current_position_as_zero()
         self.log_message_sent.emit("Position actuelle définie comme Zéro.")
 
+    @Slot(dict)
+    def define_robot_position(self, robot_coords: dict):
+        if not self.robot: return
+        valid_coords = {k.upper(): v for k, v in robot_coords.items() if k.upper() in self.robot.AXIS_MAPPING}
+        self.log_message_sent.emit(f"Redéfinition de la position à : {valid_coords}")
+        with self.robot_lock:
+            self.robot.define_position(**valid_coords)
+        self.log_message_sent.emit("Position du robot redéfinie.")
+
     def move_robot_relative(self, axis: str, distance: float):
         if not self.robot: return
         self.log_message_sent.emit(f"Déplacement relatif de {distance} sur l'axe {axis}...")
-        with self.robot_lock: self.robot.move_relative(**{axis: distance})
+        threading.Thread(target=lambda: self._execute_move_relative({axis: distance})).start()
+
+    def _execute_move_relative(self, move_dict):
+        with self.robot_lock:
+            self.robot.move_relative(**move_dict)
+        axis = list(move_dict.keys())[0]
         self.log_message_sent.emit(f"Mouvement relatif terminé sur l'axe {axis}.")
 
     def save_all_configurations(self):
