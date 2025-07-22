@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QSpinBox, QPushButton, QFormLayout, QGroupBox, QHBoxLayout,
     QMessageBox, QToolBar
 )
-from PySide6.QtGui import QIcon, QAction, QDoubleValidator
+from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import Slot, Qt
 
 from src.gui.resource_manager import ResourceManager
@@ -14,8 +14,7 @@ from src.main_controller import MainController
 
 class TelecommandeWindow(QMainWindow):
     """
-    Fenêtre dédiée au contrôle manuel avancé, à la définition
-    de points et à la calibration des références du robot.
+    Fenêtre de contrôle manuel avancé, simplifiée autour des coordonnées de la capsule.
     """
 
     def __init__(self, controller: MainController, parent=None):
@@ -23,20 +22,22 @@ class TelecommandeWindow(QMainWindow):
         self.controller = controller
         self.setWindowTitle('Télécommande du robot')
         self.setWindowIcon(QIcon(ResourceManager.get_icon_path('joystick.png')))
-        self.setGeometry(200, 200, 750, 600)
+        self.setGeometry(200, 200, 750, 550)
 
         # Dictionnaires pour stocker les widgets par axe pour un accès facile
         self.robot_pos_widgets = {}
         self.capsule_pos_widgets = {}
         self.jog_widgets = {}
-        self.capsule_target_widgets = {}
-        self.robot_target_widgets = {}
+        self.absolute_target_widgets = {}
 
         self._create_ui()
 
         # Connexions des signaux
         self.controller.robot_position_updated.connect(self.update_position_display)
-        self.controller.robot_coords_calculated.connect(self.update_robot_target_fields)
+        self.controller.robot_move_completed.connect(self.update_target_fields_after_event)
+
+        # Mise à jour initiale des champs cibles à l'ouverture
+        self._on_use_current_pos()
 
     def _create_ui(self):
         self._create_actions_and_toolbar()
@@ -45,7 +46,6 @@ class TelecommandeWindow(QMainWindow):
         self.setCentralWidget(main_widget)
         main_layout = QVBoxLayout(main_widget)
 
-        # Création des différentes sections
         main_layout.addWidget(self._create_position_display_panel())
         main_layout.addWidget(self._create_jogging_panel())
         main_layout.addWidget(self._create_absolute_move_panel())
@@ -56,7 +56,7 @@ class TelecommandeWindow(QMainWindow):
         toolbar = QToolBar("Commandes de Référence")
         self.addToolBar(toolbar)
 
-        stop_action = QAction(QIcon(ResourceManager.get_icon_path('stop_robot.png')), "Arrêt d'Urgence", self)
+        stop_action = QAction(QIcon(ResourceManager.get_icon_path('stop.png')), "Arrêt d'Urgence", self)
         stop_action.triggered.connect(self.controller.robot.stop_all_motion)
         toolbar.addAction(stop_action)
 
@@ -71,9 +71,9 @@ class TelecommandeWindow(QMainWindow):
         set_parking_action.triggered.connect(self.controller.set_robot_parking_position)
         toolbar.addAction(set_parking_action)
 
-        define_pos_action = QAction(QIcon(ResourceManager.get_icon_path('define_pos.png')), "Forcer Position Robot",
-                                    self)
-        define_pos_action.setStatusTip("Définit la position du robot aux coordonnées entrées dans les champs 'Robot'")
+        define_pos_action = QAction(QIcon(ResourceManager.get_icon_path('set_position.png')), "Forcer Position", self)
+        define_pos_action.setStatusTip(
+            "Définit la position physique actuelle du robot aux coordonnées capsule spécifiées dans les champs 'Aller à'")
         define_pos_action.triggered.connect(self._on_define_position)
         toolbar.addAction(define_pos_action)
 
@@ -83,7 +83,7 @@ class TelecommandeWindow(QMainWindow):
 
         headers = ["", "X (mm)", "Y (mm)", "Z (mm)", "Theta (°)", "Phi (°)"]
         for i, header_text in enumerate(headers):
-            grid.addWidget(QLabel(f"<b>{header_text}</b>"), 0, i + 1)
+            grid.addWidget(QLabel(f"<b>{header_text}</b>"), 0, i)
 
         grid.addWidget(QLabel("<b>Robot:</b>"), 1, 0)
         grid.addWidget(QLabel("<b>Capsule:</b>"), 2, 0)
@@ -100,7 +100,7 @@ class TelecommandeWindow(QMainWindow):
         return group
 
     def _create_jogging_panel(self) -> QGroupBox:
-        group = QGroupBox("Déplacements Relatifs (Jogging)")
+        group = QGroupBox("Déplacements Relatifs (Pas-à-pas)")
         grid = QGridLayout(group)
 
         axes = ["X", "Y", "Z", "THETA", "PHI"]
@@ -108,12 +108,16 @@ class TelecommandeWindow(QMainWindow):
             label = QLabel(f"<b>Pas {axis}:</b>")
             btn_minus = QPushButton("-")
             btn_minus.setFixedWidth(40)
-            spin_box = QLineEdit("10.0")
-            spin_box.setValidator(QDoubleValidator())
+            spin_box = QSpinBox()
+            spin_box.setRange(-1000, 1000)
+            spin_box.setValue(10)
+            unit = " mm" if axis in ['X', 'Y', 'Z'] else " °"
+            spin_box.setSuffix(unit)
+
             btn_plus = QPushButton("+")
             btn_plus.setFixedWidth(40)
 
-            self.jog_widgets[axis] = spin_box  # Store the line edit
+            self.jog_widgets[axis] = spin_box
 
             btn_minus.clicked.connect(lambda ch, a=axis, s=-1: self._on_jog(a, s))
             btn_plus.clicked.connect(lambda ch, a=axis, s=1: self._on_jog(a, s))
@@ -126,127 +130,96 @@ class TelecommandeWindow(QMainWindow):
         return group
 
     def _create_absolute_move_panel(self) -> QGroupBox:
-        group = QGroupBox("Déplacements Absolus")
-        main_layout = QHBoxLayout(group)
+        group = QGroupBox("Déplacement Absolu (Coordonnées Capsule)")
+        layout = QHBoxLayout(group)
 
-        # Panel Capsule
-        capsule_panel = QGroupBox("1. Entrer Coords Capsule")
-        capsule_layout = QFormLayout(capsule_panel)
+        form_layout = QFormLayout()
         axes = ['X', 'Y', 'Z', 'THETA', 'PHI']
         for axis in axes:
-            le = QLineEdit("0.0")
-            le.setValidator(QDoubleValidator())
-            self.capsule_target_widgets[axis] = le
+            spin_box = QSpinBox()
+            spin_box.setRange(-10000, 10000)
+            self.absolute_target_widgets[axis] = spin_box
             unit = " (mm)" if axis in ['X', 'Y', 'Z'] else " (°)"
-            capsule_layout.addRow(axis + unit, le)
-        main_layout.addWidget(capsule_panel)
+            form_layout.addRow(axis + unit, spin_box)
+        layout.addLayout(form_layout)
 
-        # Panel de contrôle (boutons)
         control_layout = QVBoxLayout()
         control_layout.addStretch()
-        calc_button = QPushButton("  ->\nCalculer")
-        use_current_button = QPushButton("  <-\nUtiliser Actuelle")
-        go_button = QPushButton(QIcon(ResourceManager.get_icon_path('play.png')), "Go")
-        control_layout.addWidget(calc_button)
+        use_current_button = QPushButton("Utiliser Actuelle")
+        use_current_button.setStatusTip("Copie la position actuelle de la capsule dans les champs de destination")
+        go_button = QPushButton(QIcon(ResourceManager.get_icon_path('play.png')), "Aller à la position")
         control_layout.addWidget(use_current_button)
+        control_layout.addWidget(go_button)
         control_layout.addStretch()
-        main_layout.addLayout(control_layout)
+        layout.addLayout(control_layout)
 
-        # Panel Robot
-        robot_panel = QGroupBox("2. Commander Coords Robot")
-        robot_layout = QFormLayout(robot_panel)
-        for axis in axes:
-            le = QLineEdit("0.0")
-            le.setValidator(QDoubleValidator())
-            self.robot_target_widgets[axis] = le
-            unit = " (mm)" if axis in ['X', 'Y', 'Z'] else " (°)"
-            robot_layout.addRow(axis + unit, le)
-        robot_layout.addRow(go_button)
-        main_layout.addWidget(robot_panel)
-
-        # Connexions
-        calc_button.clicked.connect(self._on_calculate_coords)
         use_current_button.clicked.connect(self._on_use_current_pos)
-        go_button.clicked.connect(self._on_go_absolute)
+        go_button.clicked.connect(self._on_go_absolute_capsule)
 
         return group
 
     def _create_point_creation_panel(self) -> QGroupBox:
-        group = QGroupBox("Création d'un Point de Mesure")
-        layout = QFormLayout(group)
-        self.point_name_edit = QLineEdit("mesure")
-        self.point_count_edit = QLineEdit("1")
-        self.point_count_edit.setValidator(QDoubleValidator(1, 100, 0))
-
-        store_button = QPushButton(QIcon(ResourceManager.get_icon_path('add.png')), "Stocker le point dans la liste")
-        store_button.clicked.connect(self._on_store_point)
-
-        layout.addRow("Nom de base de la mesure :", self.point_name_edit)
-        # La notion de 'nombre de mesures' est plus liée à la séquence, on la retire pour l'instant
-        # layout.addRow("Nombre de mesures :", self.point_count_edit)
-        layout.addRow(store_button)
+        group = QGroupBox("Ajout de Point à la Séquence")
+        layout = QHBoxLayout(group)
+        store_button = QPushButton(QIcon(ResourceManager.get_icon_path('add.png')),
+                                   "Ajouter la position actuelle du robot à la liste")
+        store_button.clicked.connect(self.controller.add_current_position_as_point)
+        layout.addWidget(store_button)
         return group
-
-    # --- SLOTS DE MISE A JOUR DE L'UI ---
 
     @Slot(dict)
     def update_position_display(self, positions: dict):
         for axis, widget in self.robot_pos_widgets.items():
-            widget.setText(f"{positions.get(axis, 0):.3f}")
+            widget.setText(f"{round(positions.get(axis.upper(), 0.0))}")
 
         if self.controller.robot:
+            self.controller.robot._calculate_capsule_position()
             for axis, widget in self.capsule_pos_widgets.items():
-                widget.setText(f"{self.controller.robot.capsule_pos.get(axis, 0):.3f}")
+                widget.setText(f"{round(self.controller.robot.capsule_pos.get(axis.upper(), 0.0))}")
 
     @Slot(dict)
-    def update_robot_target_fields(self, robot_coords: dict):
-        for axis, widget in self.robot_target_widgets.items():
-            widget.setText(f"{robot_coords.get(axis, 0):.3f}")
+    def update_target_fields_after_event(self, last_robot_position: dict):
+        """Met à jour les champs de destination avec la position capsule finale après un événement."""
+        if not self.controller.robot: return
 
-    # --- SLOTS D'ACTIONS UTILISATEUR ---
+        self.controller.robot.robot_pos = last_robot_position
+        self.controller.robot._calculate_capsule_position()
+
+        for axis, widget in self.absolute_target_widgets.items():
+            capsule_pos = self.controller.robot.capsule_pos.get(axis.upper(), 0.0)
+            widget.setValue(round(capsule_pos))
 
     def _on_jog(self, axis, sign):
-        try:
-            distance = float(self.jog_widgets[axis].text())
-            self.controller.move_robot_relative(axis.lower(), sign * distance)
-        except ValueError:
-            self.controller.log_message_sent.emit(f"Erreur: Le pas de déplacement pour l'axe {axis} est invalide.")
-
-    def _on_calculate_coords(self):
-        try:
-            coords = {axis: float(widget.text()) for axis, widget in self.capsule_target_widgets.items()}
-            self.controller.calculate_robot_coords(coords)
-        except ValueError:
-            QMessageBox.warning(self, "Erreur de saisie",
-                                "Veuillez entrer des valeurs numériques valides pour les coordonnées de la capsule.")
+        distance = self.jog_widgets[axis].value()
+        self.controller.move_robot_relative(axis.lower(), sign * distance)
 
     def _on_use_current_pos(self):
-        # On utilise les coordonnées robot (plus directes) pour remplir les champs cibles
-        for axis, widget in self.robot_pos_widgets.items():
-            self.capsule_target_widgets[axis].setText(widget.text())
+        """Remplit les champs de destination avec la position actuelle de la capsule."""
+        for axis, widget in self.capsule_pos_widgets.items():
+            try:
+                current_val = int(widget.text())
+                self.absolute_target_widgets[axis].setValue(current_val)
+            except (ValueError, TypeError):
+                continue
 
-    def _on_go_absolute(self):
+    def _on_go_absolute_capsule(self):
         try:
-            coords = {axis: float(widget.text()) for axis, widget in self.robot_target_widgets.items()}
-            self.controller.move_robot_absolute(coords)
+            coords = {axis: widget.value() for axis, widget in self.absolute_target_widgets.items()}
+            self.controller.move_capsule_absolute(coords)
         except ValueError:
-            QMessageBox.warning(self, "Erreur de saisie",
-                                "Veuillez entrer des valeurs numériques valides pour les coordonnées du robot.")
-
-    def _on_store_point(self):
-        self.controller.add_current_position_as_point()
+            QMessageBox.warning(self, "Erreur de saisie", "Valeurs numériques invalides.")
 
     def _on_define_position(self):
-        reply = QMessageBox.question(self, "Confirmation",
-                                     "Ceci va redéfinir l'origine du robot à la position spécifiée dans les champs 'Robot'.\n"
+        reply = QMessageBox.question(self, "Forcer la Position",
+                                     "Cette action va assigner les coordonnées capsule entrées à la position physique actuelle du robot.\n"
+                                     "Utilisez cette fonction pour la calibration manuelle.\n\n"
                                      "Êtes-vous sûr de vouloir continuer ?",
-                                     QMessageBox.Yes | QMessageBox.No)
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.No:
             return
 
         try:
-            coords = {axis: float(widget.text()) for axis, widget in self.robot_target_widgets.items()}
+            coords = {axis: widget.value() for axis, widget in self.absolute_target_widgets.items()}
             self.controller.define_robot_position(coords)
         except ValueError:
-            QMessageBox.warning(self, "Erreur de saisie",
-                                "Veuillez entrer des valeurs numériques valides pour les coordonnées du robot.")
+            QMessageBox.warning(self, "Erreur de saisie", "Valeurs numériques invalides.")

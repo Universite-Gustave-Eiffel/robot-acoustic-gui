@@ -46,8 +46,7 @@ class MainWindow(QMainWindow):
 
         splash.showMessage("Connexions finales...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
         self.controller.log_message_sent.connect(self.update_status_bar)
-        # La connexion pour la position du robot est gérée par la fenêtre Telecommande elle-même.
-        # self.controller.robot_position_updated.connect(...) est donc inutile ici.
+        # La fenêtre télécommande gère sa propre connexion au signal de position
         self.controller.point_list_changed.connect(self.update_points_table)
         self.controller.document_modified_status_changed.connect(self.update_save_action_state)
         self.controller.sequence_status_changed.connect(self.update_status_bar)
@@ -281,7 +280,8 @@ class MainWindow(QMainWindow):
             for col_index, header in enumerate(headers):
                 value = point_data.get(header, "")
                 if isinstance(value, float):
-                    item = QTableWidgetItem(f"{value:.3f}")
+                    # Affichage en nombre entier
+                    item = QTableWidgetItem(f"{round(value)}")
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 else:
                     item = QTableWidgetItem(str(value))
@@ -326,8 +326,7 @@ class MainWindow(QMainWindow):
         """Ouvre la fenêtre de dialogue de configuration."""
         config_dialog = ConfigWindow(self.controller, self)
         config_dialog.exec()
-        # Correction de l'erreur AttributeError
-        self.update_status_bar("Fenêtre de configuration fermée. Redémarrage peut être nécessaire.")
+        self.update_status_bar("Fenêtre de configuration fermée.")
 
     @Slot(str)
     def update_status_bar(self, message: str):

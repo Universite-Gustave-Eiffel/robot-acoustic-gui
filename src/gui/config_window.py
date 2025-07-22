@@ -26,14 +26,17 @@ class ConfigWindow(QDialog):
         self.setMinimumWidth(600)
         self.setMaximumHeight(800)
 
+        # Stocker les valeurs critiques initiales pour détecter les changements
         self.initial_robot_port = ""
         self.initial_robot_baudrate = ""
         self.initial_pulse_project = ""
 
+        # Layout principal
         self.main_layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
         self.main_layout.addWidget(self.tabs)
 
+        # Widgets conteneurs et ScrollArea pour chaque onglet
         self.robot_tab_widget = QWidget()
         self.pulse_tab_widget = QWidget()
 
@@ -48,9 +51,11 @@ class ConfigWindow(QDialog):
         self.tabs.addTab(self.robot_scroll, "Configuration Robot")
         self.tabs.addTab(self.pulse_scroll, "Configuration PULSE")
 
+        # Remplir les onglets
         self._create_robot_tab()
         self._create_pulse_tab()
 
+        # Boutons de la boîte de dialogue
         self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
@@ -62,7 +67,6 @@ class ConfigWindow(QDialog):
         """Crée le contenu de l'onglet de configuration du robot."""
         layout = QVBoxLayout(self.robot_tab_widget)
 
-        # --- Groupe Connexion Série ---
         serial_group = QGroupBox("Connexion Série")
         serial_layout = QFormLayout(serial_group)
         self.robot_port = QLineEdit()
@@ -74,7 +78,6 @@ class ConfigWindow(QDialog):
         serial_layout.addRow("Timeout (s):", self.robot_timeout)
         layout.addWidget(serial_group)
 
-        # --- Groupe Mouvement et Sécurité ---
         movement_group = QGroupBox("Mouvement et Parking")
         movement_layout = QFormLayout(movement_group)
         self.parking_x = QLineEdit()
@@ -89,7 +92,6 @@ class ConfigWindow(QDialog):
         movement_layout.addRow("Parking Phi (°):", self.parking_phi)
         layout.addWidget(movement_group)
 
-        # --- Groupe Paramètres de Séquence ---
         sequence_group = QGroupBox("Paramètres de Séquence")
         sequence_layout = QFormLayout(sequence_group)
         self.seq_activer_securite = QCheckBox()
@@ -100,7 +102,6 @@ class ConfigWindow(QDialog):
         sequence_layout.addRow("Temps de stabilisation sur position (s) :", self.seq_temps_stabilisation)
         layout.addWidget(sequence_group)
 
-        # --- Groupe Calibration et Dynamique ---
         calib_group = QGroupBox("Calibration et Dynamique")
         calib_layout = QFormLayout(calib_group)
         self.ratio_x = QLineEdit()
@@ -119,7 +120,6 @@ class ConfigWindow(QDialog):
         calib_layout.addRow("Décélération (pas/s²):", self.decel)
         layout.addWidget(calib_group)
 
-        # --- Groupe Corrections Géométriques ---
         offsets_group = QGroupBox("Corrections Géométriques (Cinématique Capsule)")
         offsets_layout = QFormLayout(offsets_group)
         self.corr_theta_x = QLineEdit()
@@ -179,31 +179,25 @@ class ConfigWindow(QDialog):
             cfg = self.controller.config
             self.initial_robot_port = cfg.get('SERIAL', 'port', fallback="")
             self.initial_robot_baudrate = cfg.get('SERIAL', 'baudrate', fallback="38400")
-
             self.robot_port.setText(self.initial_robot_port)
             self.robot_baudrate.setCurrentText(self.initial_robot_baudrate)
             self.robot_timeout.setText(cfg.get('SERIAL', 'timeout', fallback="0.5"))
-
             self.parking_x.setText(cfg.get('ROBOT_POSITIONS', 'parking_x', fallback=""))
             self.parking_y.setText(cfg.get('ROBOT_POSITIONS', 'parking_y', fallback=""))
             self.parking_z.setText(cfg.get('ROBOT_POSITIONS', 'parking_z', fallback=""))
             self.parking_theta.setText(cfg.get('ROBOT_POSITIONS', 'parking_theta', fallback=""))
             self.parking_phi.setText(cfg.get('ROBOT_POSITIONS', 'parking_phi', fallback=""))
-
             self.seq_activer_securite.setChecked(
                 cfg.getboolean('SEQUENCE', 'activer_securite_deplacement', fallback=True))
             self.seq_hauteur_securite.setText(cfg.get('SEQUENCE', 'hauteur_securite_deplacement_z', fallback="20.0"))
             self.seq_temps_stabilisation.setText(cfg.get('SEQUENCE', 'temps_stabilisation_s', fallback="0.5"))
-
             self.ratio_x.setText(cfg.get('RATIOS', 'x', fallback=""))
             self.ratio_y.setText(cfg.get('RATIOS', 'y', fallback=""))
             self.ratio_z.setText(cfg.get('RATIOS', 'z', fallback=""))
             self.ratio_theta.setText(cfg.get('RATIOS', 'theta', fallback=""))
             self.ratio_phi.setText(cfg.get('RATIOS', 'phi', fallback=""))
-
             self.accel.setText(cfg.get('ROBOT_SPEEDS', 'accel_steps_s2', fallback=""))
             self.decel.setText(cfg.get('ROBOT_SPEEDS', 'decel_steps_s2', fallback=""))
-
             self.corr_theta_x.setText(cfg.get('OFFSETS', 'correction_theta_x', fallback=""))
             self.corr_theta_y.setText(cfg.get('OFFSETS', 'correction_theta_y', fallback=""))
             self.corr_theta_z.setText(cfg.get('OFFSETS', 'correction_theta_z', fallback=""))
@@ -212,7 +206,6 @@ class ConfigWindow(QDialog):
         if self.controller.pulse_config:
             p_cfg = self.controller.pulse_config
             self.initial_pulse_project = p_cfg.get('PulseSettings', 'project_path', fallback="")
-
             self.pulse_project_path_edit.setText(self.initial_pulse_project)
             self.pulse_save_dir_edit.setText(p_cfg.get('PulseSettings', 'save_path_dir', fallback=""))
             self.pulse_log_dir_edit.setText(p_cfg.get('PulseSettings', 'log_dir', fallback=""))

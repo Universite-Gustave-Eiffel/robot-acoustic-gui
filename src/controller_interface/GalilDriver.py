@@ -7,7 +7,7 @@ import configparser
 import math
 import os
 
-# --- Constantes (inchangées) ---
+# --- Constantes ---
 AXIS_X_GANTRY_MASTER, AXIS_X_GANTRY_SLAVE = 'A', 'B'
 AXIS_Y_TABLE, AXIS_Z_VERTICAL = 'C', 'D'
 AXIS_THETA_ROTATION, AXIS_PHI_TILT = 'E', 'F'
@@ -16,7 +16,6 @@ AXES_ORDER = ['A', 'B', 'C', 'D', 'E', 'F']
 
 
 class GalilDriver:
-    # ... Contenu de GalilDriver inchangé ...
     def __init__(self, port, baudrate, timeout):
         self.port_name, self.baud_rate, self.timeout = port, baudrate, timeout
         self.ser, self.is_connected, self.echo_disabled = None, False, False
@@ -180,7 +179,7 @@ class RobotController:
             for name, letter in self.AXIS_MAPPING.items():
                 self.robot_pos[name] = self._from_steps(name, raw_steps.get(letter, 0))
             self._calculate_capsule_position()
-            self.last_positions = self.robot_pos.copy()  # Sauvegarde pour référence
+            self.last_positions = self.robot_pos.copy()
             return self.robot_pos
         self.logger.warning("Impossible de mettre à jour les positions (réponse nulle du driver).")
         return None
@@ -205,9 +204,8 @@ class RobotController:
         self.capsule_pos['Y'] = y_p + (corr_p_l * cp * ct)
         self.capsule_pos['Z'] = z_p - (corr_p_l * sp)
 
-    # NOUVEAU: Cinématique inverse
-    def calculate_robot_coords_for_capsule(self, capsule_x, capsule_y, capsule_z, theta, phi):
-        theta_rad, phi_rad = math.radians(theta), math.radians(phi)
+    def calculate_robot_coords_for_capsule(self, X, Y, Z, THETA, PHI):
+        theta_rad, phi_rad = math.radians(THETA), math.radians(PHI)
         offsets = self.config['OFFSETS']
         corr_t_x = offsets.getfloat('correction_theta_x')
         corr_t_y = offsets.getfloat('correction_theta_y')
@@ -217,16 +215,15 @@ class RobotController:
         ct, st = math.cos(theta_rad), math.sin(theta_rad)
         cp, sp = math.cos(phi_rad), math.sin(phi_rad)
 
-        # Inversion des équations de _calculate_capsule_position
-        x_p = capsule_x + (corr_p_l * cp * st)
-        y_p = capsule_y - (corr_p_l * cp * ct)
-        z_p = capsule_z + (corr_p_l * sp)
+        x_p = X + (corr_p_l * cp * st)
+        y_p = Y - (corr_p_l * cp * ct)
+        z_p = Z + (corr_p_l * sp)
 
         robot_x = x_p - (corr_t_x * ct) + (corr_t_y * st)
         robot_y = y_p - (corr_t_x * st) - (corr_t_y * ct)
         robot_z = z_p - corr_t_z
 
-        return {'X': robot_x, 'Y': robot_y, 'Z': robot_z, 'THETA': theta, 'PHI': phi}
+        return {'X': robot_x, 'Y': robot_y, 'Z': robot_z, 'THETA': THETA, 'PHI': PHI}
 
     def move_to(self, **kwargs):
         axes_to_move_set, pa_values = set(), [''] * len(AXES_ORDER)
@@ -259,12 +256,19 @@ class RobotController:
     def define_position(self, **kwargs):
         """Définit la position actuelle des axes spécifiés sans les déplacer (DP)."""
         dp_values = [''] * len(AXES_ORDER)
+        has_args = False
         for name, value in kwargs.items():
             name_up = name.upper()
             if name_up in self.AXIS_MAPPING:
                 axis_letter = self.AXIS_MAPPING[name_up]
                 steps = self._to_steps(name_up, value)
                 dp_values[AXES_ORDER.index(axis_letter)] = str(steps)
+                has_args = True
+
+        if not has_args:
+            self.logger.warning("define_position appelée sans arguments valides.")
+            return
+
         cmd_dp = f"DP {','.join(dp_values)}"
         self.logger.info(f"Définition de position manuelle : {cmd_dp}")
         self.driver.send_cmd(cmd_dp)

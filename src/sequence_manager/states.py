@@ -32,7 +32,7 @@ class StateSecurityMove(State):
         with context['robot_lock']:
             self.robot.move_to(z=hauteur_z)
 
-        # Après le mouvement de sécurité, on va au premier point.
+        # Après le mouvement de sécurité, on va au point cible.
         return StateMoveToPoint, context
 
 
@@ -46,16 +46,13 @@ class StateMoveToPoint(State):
         activer_securite = context['sequence_params'].get('activer_securite', False)
 
         with robot_lock:
-            # Si la sécurité n'est pas activée, on va directement aux coordonnées complètes
             if not activer_securite:
                 self.logger.info(f"Déplacement direct vers le point {point_index + 1}: {point}")
                 self.robot.move_to(x=point.x, y=point.y, z=point.z, theta=point.theta, phi=point.phi)
             else:
-                # Sinon, mouvement en deux temps: d'abord XY et rotations, puis descente en Z.
                 self.logger.info(f"Déplacement (XY, Rot) vers le point {point_index + 1}")
                 self.robot.move_to(x=point.x, y=point.y, theta=point.theta, phi=point.phi)
 
-                # Petite pause pour s'assurer que le robot est stabilisé en XY avant la descente
                 time.sleep(0.2)
 
                 self.logger.info(f"Descente en Z vers le point {point_index + 1}")
@@ -85,7 +82,7 @@ class StateStartMeasure(State):
         seq_manager.action_completed_event.clear()
         seq_manager.action_success = False
         seq_manager.start_measure_requested.emit()
-        seq_manager.action_completed_event.wait(timeout=10)  # Timeout pour éviter un blocage infini
+        seq_manager.action_completed_event.wait(timeout=10)
 
         if not seq_manager.action_success:
             context['error'] = "Échec du démarrage de la mesure PULSE."
@@ -155,7 +152,6 @@ class StateNextPoint(State):
 
         if context['current_index'] < len(context['points']):
             self.logger.info("Passage au point suivant.")
-            # Si la sécurité est activée, on remonte avant d'aller au point suivant.
             if activer_securite:
                 return StateSecurityMove, context
             else:
@@ -179,5 +175,4 @@ class StateError(State):
     def execute(self, context):
         error_message = context.get('error', 'Erreur inconnue dans la séquence.')
         self.logger.error(f"État d'erreur atteint : {error_message}")
-        # Cet état mène directement à la fin de la séquence
         return StateEnd, context
