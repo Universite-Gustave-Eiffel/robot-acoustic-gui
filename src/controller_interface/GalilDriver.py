@@ -157,6 +157,12 @@ class RobotController:
     def enable_motors(self):
         self.logger.info("Activation des moteurs...")
         self.driver.send_cmd(f"SH{self.ALL_AXES}")
+        self.logger.info("Configuration du Gantry pour les axes A (maître) et B (esclave)...")
+        # CORRECTION: Séquence correcte pour configurer le Gantry
+        self.driver.send_cmd(f"GA ,{AXIS_X_GANTRY_MASTER}")  # GA ,A -> B est asservi à A
+        self.driver.send_cmd(f"GR ,-1")  # GR ,-1 -> Ratio de -1 pour B
+        self.driver.send_cmd(f"GM ,1")  # GM ,1  -> Active le mode Gantry pour B
+        self.logger.info("Gantry configuré.")
 
     def disable_motors(self):
         self.logger.info("Désactivation des moteurs...")
@@ -185,6 +191,7 @@ class RobotController:
         return None
 
     def _calculate_capsule_position(self):
+        # ... (inchangé)
         x_r, y_r, z_r = self.robot_pos['X'], self.robot_pos['Y'], self.robot_pos['Z']
         theta_rad, phi_rad = math.radians(self.robot_pos['THETA']), math.radians(self.robot_pos['PHI'])
         offsets = self.config['OFFSETS']
@@ -192,56 +199,66 @@ class RobotController:
         corr_t_y = offsets.getfloat('correction_theta_y')
         corr_t_z = offsets.getfloat('correction_theta_z')
         corr_p_l = offsets.getfloat('correction_phi_l')
-
         ct, st = math.cos(theta_rad), math.sin(theta_rad)
         cp, sp = math.cos(phi_rad), math.sin(phi_rad)
-
         x_p = x_r + (corr_t_x * ct) - (corr_t_y * st)
         y_p = y_r + (corr_t_x * st) + (corr_t_y * ct)
         z_p = z_r + corr_t_z
-
         self.capsule_pos['X'] = x_p - (corr_p_l * cp * st)
         self.capsule_pos['Y'] = y_p + (corr_p_l * cp * ct)
         self.capsule_pos['Z'] = z_p - (corr_p_l * sp)
 
     def calculate_robot_coords_for_capsule(self, X, Y, Z, THETA, PHI):
+        # ... (inchangé)
         theta_rad, phi_rad = math.radians(THETA), math.radians(PHI)
         offsets = self.config['OFFSETS']
         corr_t_x = offsets.getfloat('correction_theta_x')
         corr_t_y = offsets.getfloat('correction_theta_y')
         corr_t_z = offsets.getfloat('correction_theta_z')
         corr_p_l = offsets.getfloat('correction_phi_l')
-
         ct, st = math.cos(theta_rad), math.sin(theta_rad)
         cp, sp = math.cos(phi_rad), math.sin(phi_rad)
-
         x_p = X + (corr_p_l * cp * st)
         y_p = Y - (corr_p_l * cp * ct)
         z_p = Z + (corr_p_l * sp)
-
         robot_x = x_p - (corr_t_x * ct) + (corr_t_y * st)
         robot_y = y_p - (corr_t_x * st) - (corr_t_y * ct)
         robot_z = z_p - corr_t_z
-
         return {'X': robot_x, 'Y': robot_y, 'Z': robot_z, 'THETA': THETA, 'PHI': PHI}
 
     def move_to(self, **kwargs):
-        axes_to_move_set, pa_values = set(), [''] * len(AXES_ORDER)
+        axes_to_command = set()
+        pa_values = [''] * len(AXES_ORDER)
+
         for name, value in kwargs.items():
             name_up = name.upper()
             if name_up in self.AXIS_MAPPING:
                 axis_letter = self.AXIS_MAPPING[name_up]
+                # CORRECTION : Ne pas inclure l'esclave B dans la commande PA
+                if axis_letter == AXIS_X_GANTRY_SLAVE:
+                    continue
                 steps = self._to_steps(name_up, value)
                 pa_values[AXES_ORDER.index(axis_letter)] = str(steps)
-                axes_to_move_set.add(axis_letter)
-        if not axes_to_move_set: self.logger.warning("move_to appelé sans coordonnées valides."); return
-        if self.AXIS_MAPPING['X'] in axes_to_move_set: axes_to_move_set.add(self.AXIS_GANTRY_SLAVE)
-        axes_to_begin_str = "".join(sorted(list(axes_to_move_set)))
+                axes_to_command.add(axis_letter)
+
+        if not axes_to_command:
+            self.logger.warning("move_to appelé sans coordonnées valides.")
+            return
+
+        axes_to_wait_for = axes_to_command.copy()
+        # On attend la fin du maître ET de l'esclave
+        if AXIS_X_GANTRY_MASTER in axes_to_command:
+            axes_to_wait_for.add(AXIS_X_GANTRY_SLAVE)
+
+        axes_to_begin_str = "".join(sorted(list(axes_to_command)))
+        axes_to_wait_str = "".join(sorted(list(axes_to_wait_for)))
+
         cmd_pa = f"PA {','.join(pa_values)}"
-        self.logger.info(f"Mouvement Absolu: {cmd_pa} | BG {axes_to_begin_str}")
+        self.logger.info(f"Mouvement Absolu: {cmd_pa} | BG {axes_to_begin_str} | Wait for {axes_to_wait_str}")
+
         self.driver.send_cmd(cmd_pa)
         self.driver.send_cmd(f"BG {axes_to_begin_str}")
-        self.driver.wait_motion_complete(axes_to_begin_str)
+        self.driver.wait_motion_complete(axes_to_wait_str)
         self.update_positions()
 
     def go_home(self):
@@ -254,7 +271,6 @@ class RobotController:
         self.update_positions()
 
     def define_position(self, **kwargs):
-        """Définit la position actuelle des axes spécifiés sans les déplacer (DP)."""
         dp_values = [''] * len(AXES_ORDER)
         has_args = False
         for name, value in kwargs.items():
