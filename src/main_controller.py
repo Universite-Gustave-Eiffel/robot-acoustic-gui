@@ -391,6 +391,15 @@ class MainController(QObject):
             self.robot_move_completed.emit(self.robot.last_positions)
         self.log_message_sent.emit("Position actuelle définie comme Zéro.")
 
+    @Slot(str, float)
+    def robot_jog_continuous(self, axis: str, speed: float):
+        """Démarre ou arrête un mouvement de jogging continu."""
+        if not self.robot: return
+        # Le jogging est une commande rapide, on ne la met pas dans un thread séparé
+        # pour une meilleure réactivité, mais on utilise le lock.
+        with self.robot_lock:
+            self.robot.jog_continuous(**{axis: speed})
+
     def save_all_configurations(self):
         try:
             if self.config and self.robot_config_path:

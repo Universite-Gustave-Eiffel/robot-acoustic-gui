@@ -158,13 +158,16 @@ class RobotController:
         self.logger.info("Activation des moteurs...")
         self.driver.send_cmd(f"SH{self.ALL_AXES}")
         self.logger.info("Configuration du Gantry pour les axes A (maître) et B (esclave)...")
-        # CORRECTION: Séquence correcte pour configurer le Gantry
-        self.driver.send_cmd(f"GA ,{AXIS_X_GANTRY_MASTER}")  # GA ,A -> B est asservi à A
-        self.driver.send_cmd(f"GR ,-1")  # GR ,-1 -> Ratio de -1 pour B
-        self.driver.send_cmd(f"GM ,1")  # GM ,1  -> Active le mode Gantry pour B
+        self.driver.send_cmd(f"GA ,{AXIS_X_GANTRY_MASTER}")
+        self.driver.send_cmd(f"GR ,-1")
+        self.driver.send_cmd(f"GM ,1")
         self.logger.info("Gantry configuré.")
 
     def disable_motors(self):
+        self.logger.info("Nettoyage de la configuration Gantry...")
+        self.driver.send_cmd(f"GR ,0")  # Annule le ratio d'asservissement pour B
+        self.driver.send_cmd(f"GM ,0")  # Désactive le mode gantry pour B
+
         self.logger.info("Désactivation des moteurs...")
         self.driver.send_cmd(f"MO{self.ALL_AXES}")
 
@@ -191,7 +194,6 @@ class RobotController:
         return None
 
     def _calculate_capsule_position(self):
-        # ... (inchangé)
         x_r, y_r, z_r = self.robot_pos['X'], self.robot_pos['Y'], self.robot_pos['Z']
         theta_rad, phi_rad = math.radians(self.robot_pos['THETA']), math.radians(self.robot_pos['PHI'])
         offsets = self.config['OFFSETS']
@@ -209,7 +211,6 @@ class RobotController:
         self.capsule_pos['Z'] = z_p - (corr_p_l * sp)
 
     def calculate_robot_coords_for_capsule(self, X, Y, Z, THETA, PHI):
-        # ... (inchangé)
         theta_rad, phi_rad = math.radians(THETA), math.radians(PHI)
         offsets = self.config['OFFSETS']
         corr_t_x = offsets.getfloat('correction_theta_x')
@@ -229,12 +230,10 @@ class RobotController:
     def move_to(self, **kwargs):
         axes_to_command = set()
         pa_values = [''] * len(AXES_ORDER)
-
         for name, value in kwargs.items():
             name_up = name.upper()
             if name_up in self.AXIS_MAPPING:
                 axis_letter = self.AXIS_MAPPING[name_up]
-                # CORRECTION : Ne pas inclure l'esclave B dans la commande PA
                 if axis_letter == AXIS_X_GANTRY_SLAVE:
                     continue
                 steps = self._to_steps(name_up, value)
@@ -246,7 +245,6 @@ class RobotController:
             return
 
         axes_to_wait_for = axes_to_command.copy()
-        # On attend la fin du maître ET de l'esclave
         if AXIS_X_GANTRY_MASTER in axes_to_command:
             axes_to_wait_for.add(AXIS_X_GANTRY_SLAVE)
 
@@ -327,3 +325,28 @@ class RobotController:
                 self.logger.warning(f"Axe inconnu dans move_relative : {axis}")
         self.logger.info(f"Déplacement relatif vers les coordonnées cibles : {target_coords}")
         self.move_to(**target_coords)
+
+    def jog_continuous(self, **kwargs):
+        """Envoie une commande de Jogging (JG) pour un mouvement continu."""
+        jg_values = [''] * len(AXES_ORDER)
+        axes_to_move_str = ""
+        has_args = False
+        for name, speed in kwargs.items():
+            name_up = name.upper()
+            if name_up in self.AXIS_MAPPING:
+                axis_letter = self.AXIS_MAPPING[name_up]
+                speed_in_steps = self._to_steps(name_up, speed)
+                jg_values[AXES_ORDER.index(axis_letter)] = str(speed_in_steps)
+                axes_to_move_str += axis_letter
+                has_args = True
+
+        if not has_args:
+            self.logger.warning("jog_continuous appelé sans arguments valides.")
+            return
+
+        axes_to_begin_str = axes_to_move_str.replace(self.AXIS_GANTRY_SLAVE, '')
+
+        cmd_jg = f"JG {','.join(jg_values)}"
+        self.logger.info(f"Mouvement Jog: {cmd_jg} | BG {axes_to_begin_str}")
+        self.driver.send_cmd(cmd_jg)
+        self.driver.send_cmd(f"BG {axes_to_begin_str}")
