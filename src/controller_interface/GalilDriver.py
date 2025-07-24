@@ -16,6 +16,7 @@ AXES_ORDER = ['A', 'B', 'C', 'D', 'E', 'F']
 
 
 class GalilDriver:
+    # ... (contenu de GalilDriver inchangé) ...
     def __init__(self, port, baudrate, timeout):
         self.port_name, self.baud_rate, self.timeout = port, baudrate, timeout
         self.ser, self.is_connected, self.echo_disabled = None, False, False
@@ -164,16 +165,15 @@ class RobotController:
         self.logger.info("Gantry configuré.")
 
     def disable_motors(self):
-        self.logger.info("Nettoyage de la configuration Gantry...")
-        self.driver.send_cmd(f"GR ,0")  # Annule le ratio d'asservissement pour B
-        self.driver.send_cmd(f"GM ,0")  # Désactive le mode gantry pour B
+        self.driver.send_cmd("ST")
+        time.sleep(0.1)
 
-        self.logger.info("Désactivation des moteurs...")
-        self.driver.send_cmd(f"MO{self.ALL_AXES}")
+        self.logger.info("Désactivation de tous les moteurs...")
+        self.driver.send_cmd("MO")
 
     def stop_all_motion(self):
         self.logger.warning("Arrêt d'urgence.")
-        self.driver.send_cmd(f"ST{self.ALL_AXES}")
+        self.driver.send_cmd("ST")
 
     def _to_steps(self, axis_name, value):
         return int(value * self.config.getfloat('RATIOS', axis_name.lower()))
