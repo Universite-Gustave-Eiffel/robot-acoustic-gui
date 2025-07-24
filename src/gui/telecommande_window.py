@@ -22,7 +22,7 @@ class TelecommandeWindow(QMainWindow):
         self.controller = controller
         self.setWindowTitle('Télécommande du robot')
         self.setWindowIcon(QIcon(ResourceManager.get_icon_path('joystick.png')))
-        self.setGeometry(200, 200, 750, 700)  # Hauteur légèrement augmentée pour la nouvelle UI
+        self.setGeometry(200, 200, 750, 600)  # Hauteur ajustée
 
         self.robot_pos_widgets = {}
         self.capsule_pos_widgets = {}
@@ -39,9 +39,9 @@ class TelecommandeWindow(QMainWindow):
             Qt.Key_Right: ('X', 1),
             Qt.Key_PageUp: ('Z', 1),
             Qt.Key_PageDown: ('Z', -1),
-            Qt.Key_Q: ('THETA', 1),
+            Qt.Key_A: ('THETA', 1),
             Qt.Key_D: ('THETA', -1),
-            Qt.Key_Z: ('PHI', 1),
+            Qt.Key_W: ('PHI', 1),
             Qt.Key_S: ('PHI', -1),
         }
 
@@ -69,7 +69,6 @@ class TelecommandeWindow(QMainWindow):
         self._update_widgets_state()
 
     def _create_actions_and_toolbar(self):
-        # ... (inchangé)
         toolbar = QToolBar("Commandes de Référence")
         self.addToolBar(toolbar)
         stop_action = QAction(QIcon(ResourceManager.get_icon_path('stop.png')), "Arrêt d'Urgence", self)
@@ -90,7 +89,6 @@ class TelecommandeWindow(QMainWindow):
         toolbar.addAction(define_pos_action)
 
     def _create_position_display_panel(self) -> QGroupBox:
-        # ... (inchangé)
         group = QGroupBox("Position Actuelle")
         grid = QGridLayout(group)
         headers = ["", "X (mm)", "Y (mm)", "Z (mm)", "Theta (°)", "Phi (°)"]
@@ -108,7 +106,6 @@ class TelecommandeWindow(QMainWindow):
         return group
 
     def _create_key_label(self, text):
-        """Fonction utilitaire pour créer un QLabel stylisé comme une touche."""
         label = QLabel(text)
         label.setFrameStyle(QFrame.Box | QFrame.Raised)
         label.setAlignment(Qt.AlignCenter)
@@ -125,9 +122,10 @@ class TelecommandeWindow(QMainWindow):
         self.keyboard_control_button.toggled.connect(self._on_keyboard_control_toggled)
         main_layout.addWidget(self.keyboard_control_button)
 
-        controls_layout = QHBoxLayout()
+        # NOUVEAU: Création du widget conteneur pour le layout des touches
+        self.keyboard_layout_widget = QWidget()
+        controls_layout = QHBoxLayout(self.keyboard_layout_widget)
 
-        # Groupe Rotations (Z, Q, S, D)
         rotation_group = QGroupBox("Rotations")
         rotation_layout = QGridLayout(rotation_group)
         rotation_layout.addWidget(self._create_key_label("Z (Phi+)"), 0, 1)
@@ -136,7 +134,6 @@ class TelecommandeWindow(QMainWindow):
         rotation_layout.addWidget(self._create_key_label("D (Th-)"), 1, 2)
         controls_layout.addWidget(rotation_group)
 
-        # Groupe Altitude (PageUp/Down)
         altitude_group = QGroupBox("Altitude")
         altitude_layout = QVBoxLayout(altitude_group)
         altitude_layout.addWidget(self._create_key_label("PgUp (Z+)"))
@@ -144,7 +141,6 @@ class TelecommandeWindow(QMainWindow):
         altitude_layout.addStretch()
         controls_layout.addWidget(altitude_group)
 
-        # Groupe Translation (Flèches)
         translation_group = QGroupBox("Translation")
         translation_layout = QGridLayout(translation_group)
         translation_layout.addWidget(self._create_key_label("↑ (Y+)"), 0, 1)
@@ -153,12 +149,14 @@ class TelecommandeWindow(QMainWindow):
         translation_layout.addWidget(self._create_key_label("→ (X+)"), 1, 2)
         controls_layout.addWidget(translation_group)
 
-        main_layout.addLayout(controls_layout)
+        main_layout.addWidget(self.keyboard_layout_widget)
+        self.keyboard_layout_widget.hide()  # Masquer par défaut
+
         return group
 
     def _create_jogging_panel(self) -> QGroupBox:
-        # ... (inchangé)
         self.jogging_group = QGroupBox("Déplacements Relatifs (Pas-à-pas)")
+        # ... (contenu inchangé)
         grid = QGridLayout(self.jogging_group)
         axes = ["X", "Y", "Z", "THETA", "PHI"]
         for i, axis in enumerate(axes):
@@ -182,8 +180,8 @@ class TelecommandeWindow(QMainWindow):
         return self.jogging_group
 
     def _create_absolute_move_panel(self) -> QGroupBox:
-        # ... (inchangé)
         self.absolute_move_group = QGroupBox("Déplacement Absolu (Coordonnées Capsule)")
+        # ... (contenu inchangé)
         layout = QHBoxLayout(self.absolute_move_group)
         form_layout = QFormLayout()
         axes = ['X', 'Y', 'Z', 'THETA', 'PHI']
@@ -208,8 +206,8 @@ class TelecommandeWindow(QMainWindow):
         return self.absolute_move_group
 
     def _create_point_creation_panel(self) -> QGroupBox:
-        # ... (inchangé)
         self.point_creation_group = QGroupBox("Ajout de Point à la Séquence")
+        # ... (contenu inchangé)
         layout = QHBoxLayout(self.point_creation_group)
         store_button = QPushButton(QIcon(ResourceManager.get_icon_path('add.png')),
                                    "Ajouter la position actuelle du robot à la liste")
@@ -218,7 +216,6 @@ class TelecommandeWindow(QMainWindow):
         return self.point_creation_group
 
     def _update_widgets_state(self):
-        # ... (inchangé)
         is_locked = self.keyboard_control_active
         self.jogging_group.setEnabled(not is_locked)
         self.absolute_move_group.setEnabled(not is_locked)
@@ -226,9 +223,12 @@ class TelecommandeWindow(QMainWindow):
 
     @Slot(bool)
     def _on_keyboard_control_toggled(self, checked):
-        # ... (inchangé)
         self.keyboard_control_active = checked
         self._update_widgets_state()
+
+        # MODIFIÉ: Gérer la visibilité du layout des touches
+        self.keyboard_layout_widget.setVisible(checked)
+
         if checked:
             self.keyboard_control_button.setText("Désactiver le Contrôle Clavier (FOCUS)")
             self.setFocus()
@@ -241,7 +241,6 @@ class TelecommandeWindow(QMainWindow):
 
     @Slot(dict)
     def update_position_display(self, positions: dict):
-        # ... (inchangé)
         for axis, widget in self.robot_pos_widgets.items():
             widget.setText(f"{round(positions.get(axis.upper(), 0.0))}")
         if self.controller.robot:
@@ -251,7 +250,6 @@ class TelecommandeWindow(QMainWindow):
 
     @Slot(dict)
     def update_target_fields_after_event(self, last_robot_position: dict):
-        # ... (inchangé)
         if not self.controller.robot: return
         self.controller.robot.robot_pos = last_robot_position
         self.controller.robot._calculate_capsule_position()
@@ -260,12 +258,10 @@ class TelecommandeWindow(QMainWindow):
             widget.setValue(round(capsule_pos))
 
     def _on_jog(self, axis, sign):
-        # ... (inchangé)
         distance = self.jog_widgets[axis].value()
         self.controller.move_robot_relative(axis.lower(), sign * distance)
 
     def _on_use_current_pos(self):
-        # ... (inchangé)
         for axis, widget in self.capsule_pos_widgets.items():
             try:
                 current_val = int(widget.text())
@@ -274,7 +270,6 @@ class TelecommandeWindow(QMainWindow):
                 continue
 
     def _on_go_absolute_capsule(self):
-        # ... (inchangé)
         try:
             coords = {axis: widget.value() for axis, widget in self.absolute_target_widgets.items()}
             self.controller.move_capsule_absolute(coords)
@@ -282,7 +277,6 @@ class TelecommandeWindow(QMainWindow):
             QMessageBox.warning(self, "Erreur de saisie", "Valeurs numériques invalides.")
 
     def _on_define_position(self):
-        # ... (inchangé)
         reply = QMessageBox.question(self, "Forcer la Position",
                                      "Cette action va assigner les coordonnées capsule entrées à la position physique actuelle du robot.\n"
                                      "Utilisez cette fonction pour la calibration manuelle.\n\n"
@@ -301,16 +295,18 @@ class TelecommandeWindow(QMainWindow):
             return
 
         key = event.key()
+        # Le mappage PySide6 peut varier entre OS, on gère les deux cas (AZERTY/QWERTY)
+        if key == Qt.Key_Q: key = Qt.Key_A
+        if key == Qt.Key_Z: key = Qt.Key_W
+
         if key in self.key_mapping:
             axis, direction = self.key_mapping[key]
-
             speed_key_map = {'X': 'jog_xy_mm_s', 'Y': 'jog_xy_mm_s', 'Z': 'jog_z_mm_s', 'THETA': 'jog_rot_deg_s',
                              'PHI': 'jog_rot_deg_s'}
             speed_config_key = speed_key_map.get(axis)
 
             try:
                 speed = self.controller.config.getfloat('ROBOT_SPEEDS', speed_config_key)
-
                 if self.active_jogs.get(axis) != direction:
                     self.controller.robot_jog_continuous(axis.lower(), direction * speed)
                     self.active_jogs[axis] = direction
@@ -325,9 +321,12 @@ class TelecommandeWindow(QMainWindow):
             return
 
         key = event.key()
+        # Le mappage PySide6 peut varier entre OS, on gère les deux cas (AZERTY/QWERTY)
+        if key == Qt.Key_Q: key = Qt.Key_A
+        if key == Qt.Key_Z: key = Qt.Key_W
+
         if key in self.key_mapping:
             axis, direction = self.key_mapping[key]
-
             if self.active_jogs.get(axis) == direction:
                 self.controller.robot_jog_continuous(axis.lower(), 0)
                 self.active_jogs[axis] = 0
