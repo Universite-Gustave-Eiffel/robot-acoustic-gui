@@ -228,8 +228,8 @@ class MainController(QObject):
             return
         self.log_message_sent.emit("Démarrage de la séquence de mesure...")
         sequence_params = {
-            'activer_securite': self.config.getboolean('SEQUENCE', 'activer_securite_deplacement', fallback=True),
-            'hauteur_securite_z': self.config.getfloat('SEQUENCE', 'hauteur_securite_deplacement_z', fallback=20.0),
+            'activer_securite_deplacement': self.config.getboolean('SEQUENCE', 'activer_securite_deplacement', fallback=True),
+            'hauteur_securite_deplacement_z': self.config.getfloat('SEQUENCE', 'hauteur_securite_deplacement_z', fallback=20.0),
             'temps_stabilisation_s': self.config.getfloat('SEQUENCE', 'temps_stabilisation_s', fallback=0.5)
         }
         self.sequence_thread = SequenceManager(self.robot, self.pulse, points, sequence_params)
@@ -391,14 +391,15 @@ class MainController(QObject):
             self.robot_move_completed.emit(self.robot.last_positions)
         self.log_message_sent.emit("Position actuelle définie comme Zéro.")
 
-    @Slot(str, float)
-    def robot_jog_continuous(self, axis: str, speed: float):
-        """Démarre ou arrête un mouvement de jogging continu."""
-        if not self.robot: return
-        # Le jogging est une commande rapide, on ne la met pas dans un thread séparé
-        # pour une meilleure réactivité, mais on utilise le lock.
+    @Slot()
+    def robot_jog_continuous(self, **kwargs):
+        """Démarre ou arrête un mouvement de jogging continu.
+           Accepte des arguments par mot-clé (ex: x=vitesse, phi=vitesse).
+        """
+        if not self.robot:
+            return
         with self.robot_lock:
-            self.robot.jog_continuous(**{axis: speed})
+            self.robot.jog_continuous(**kwargs)
 
     def save_all_configurations(self):
         try:

@@ -16,7 +16,6 @@ AXES_ORDER = ['A', 'B', 'C', 'D', 'E', 'F']
 
 
 class GalilDriver:
-    # ... (contenu de GalilDriver inchangé) ...
     def __init__(self, port, baudrate, timeout):
         self.port_name, self.baud_rate, self.timeout = port, baudrate, timeout
         self.ser, self.is_connected, self.echo_disabled = None, False, False
@@ -111,7 +110,6 @@ class GalilDriver:
         self.logger.info(f"Attente fin de mouvement pour axes: {axes_str} (timeout={timeout}s)...")
         self.send_cmd(f"AM{axes_str}", timeout_override=timeout)
         self.logger.info(f"Profil de mouvement (AM) terminé pour {axes_str}.")
-
         start_time = time.time()
         while time.time() - start_time < timeout:
             all_axes_stopped = True
@@ -125,14 +123,11 @@ class GalilDriver:
                     self.logger.warning(f"Réponse invalide pour _BG{axis}: '{response}'")
                     all_axes_stopped = False
                     break
-
             if all_axes_stopped:
                 self.logger.info("Tous les axes sont physiquement à l'arrêt.")
                 time.sleep(0.2)
                 return
-
             time.sleep(0.1)
-
         self.logger.error(f"Timeout dépassé en attendant l'arrêt physique des axes {axes_str}.")
 
 
@@ -167,13 +162,42 @@ class RobotController:
     def disable_motors(self):
         self.driver.send_cmd("ST")
         time.sleep(0.1)
-
         self.logger.info("Désactivation de tous les moteurs...")
         self.driver.send_cmd("MO")
 
     def stop_all_motion(self):
-        self.logger.warning("Arrêt d'urgence.")
+        self.logger.warning("Commande ST (Stop) envoyée pour tous les axes.")
         self.driver.send_cmd("ST")
+        self.driver.wait_motion_complete(self.ALL_AXES)
+        self.logger.info("Mouvement stoppé. Le contrôleur est prêt pour de nouvelles commandes.")
+
+    def reset_jog_mode(self):
+        """Séquence de sortie propre du mode JOG validée par les tests."""
+        self.logger.info("Réinitialisation de l'état après le mode JOG...")
+        self.driver.send_cmd(f"ST {self.ALL_AXES}")
+        self.driver.send_cmd(f"MO {self.ALL_AXES}")
+        time.sleep(0.5)  # Pause de sécurité pour la désactivation
+        self.driver.send_cmd(f"SH {self.ALL_AXES}")
+        self.logger.info("État du servo réinitialisé.")
+
+    def begin_jog_mode(self):
+        self.logger.info("Activation du mode JOG...")
+        self.driver.send_cmd(f"JG {','.join(['0'] * len(AXES_ORDER))}")
+        self.driver.send_cmd(f"BG {self.ALL_AXES}")
+        self.logger.info("Mode JOG actif.")
+
+    def jog_continuous(self, **kwargs):
+        jg_values = [''] * len(AXES_ORDER)
+        for name, speed in kwargs.items():
+            name_up = name.upper()
+            if name_up in self.AXIS_MAPPING:
+                axis_letter = self.AXIS_MAPPING[name_up]
+                speed_in_steps = self._to_steps(name_up, speed)
+                jg_values[AXES_ORDER.index(axis_letter)] = str(speed_in_steps)
+
+        cmd_jg = f"JG {','.join(jg_values)}"
+        self.logger.debug(f"Mise à jour vitesse Jog: {cmd_jg}")
+        self.driver.send_cmd(cmd_jg)
 
     def _to_steps(self, axis_name, value):
         return int(value * self.config.getfloat('RATIOS', axis_name.lower()))
@@ -325,28 +349,3 @@ class RobotController:
                 self.logger.warning(f"Axe inconnu dans move_relative : {axis}")
         self.logger.info(f"Déplacement relatif vers les coordonnées cibles : {target_coords}")
         self.move_to(**target_coords)
-
-    def jog_continuous(self, **kwargs):
-        """Envoie une commande de Jogging (JG) pour un mouvement continu."""
-        jg_values = [''] * len(AXES_ORDER)
-        axes_to_move_str = ""
-        has_args = False
-        for name, speed in kwargs.items():
-            name_up = name.upper()
-            if name_up in self.AXIS_MAPPING:
-                axis_letter = self.AXIS_MAPPING[name_up]
-                speed_in_steps = self._to_steps(name_up, speed)
-                jg_values[AXES_ORDER.index(axis_letter)] = str(speed_in_steps)
-                axes_to_move_str += axis_letter
-                has_args = True
-
-        if not has_args:
-            self.logger.warning("jog_continuous appelé sans arguments valides.")
-            return
-
-        axes_to_begin_str = axes_to_move_str.replace(self.AXIS_GANTRY_SLAVE, '')
-
-        cmd_jg = f"JG {','.join(jg_values)}"
-        self.logger.info(f"Mouvement Jog: {cmd_jg} | BG {axes_to_begin_str}")
-        self.driver.send_cmd(cmd_jg)
-        self.driver.send_cmd(f"BG {axes_to_begin_str}")

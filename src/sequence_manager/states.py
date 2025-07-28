@@ -27,23 +27,25 @@ class StateSecurityMove(State):
     """Monte le robot à une altitude de sécurité Z."""
 
     def execute(self, context):
-        hauteur_z = context['sequence_params'].get('hauteur_securite_z', 20.0)
+        sequence_params = context.get('sequence_params', {})
+        hauteur_z = sequence_params.get('hauteur_securite_deplacement_z', 20.0)
+
         self.logger.info(f"Déplacement de sécurité vers Z = {hauteur_z} mm.")
         with context['robot_lock']:
             self.robot.move_to(z=hauteur_z)
 
-        # Après le mouvement de sécurité, on va au point cible.
         return StateMoveToPoint, context
 
 
 class StateMoveToPoint(State):
-    """Déplace le robot vers un point spécifique (X, Y, Theta, Phi), puis Z."""
+    """Déplace le robot vers un point spécifique."""
 
     def execute(self, context):
         point_index = context['current_index']
         point = context['points'][point_index]
         robot_lock = context['robot_lock']
-        activer_securite = context['sequence_params'].get('activer_securite', False)
+        sequence_params = context.get('sequence_params', {})
+        activer_securite = sequence_params.get('activer_securite_deplacement', False)
 
         with robot_lock:
             if not activer_securite:
@@ -52,9 +54,7 @@ class StateMoveToPoint(State):
             else:
                 self.logger.info(f"Déplacement (XY, Rot) vers le point {point_index + 1}")
                 self.robot.move_to(x=point.x, y=point.y, theta=point.theta, phi=point.phi)
-
                 time.sleep(0.2)
-
                 self.logger.info(f"Descente en Z vers le point {point_index + 1}")
                 self.robot.move_to(z=point.z)
 
@@ -65,7 +65,9 @@ class StateStabilize(State):
     """Attend un temps défini pour la stabilisation du robot."""
 
     def execute(self, context):
-        temps_stabilisation = context['sequence_params'].get('temps_stabilisation_s', 0.5)
+        sequence_params = context.get('sequence_params', {})
+        temps_stabilisation = sequence_params.get('temps_stabilisation_s', 0.5)
+
         if temps_stabilisation > 0:
             self.logger.info(f"Stabilisation pendant {temps_stabilisation} seconde(s)...")
             time.sleep(temps_stabilisation)
@@ -78,16 +80,13 @@ class StateStartMeasure(State):
     def execute(self, context):
         seq_manager = context['sequence_manager']
         self.logger.info(f"Demande de démarrage de la mesure pour le point {context['current_index'] + 1}.")
-
         seq_manager.action_completed_event.clear()
         seq_manager.action_success = False
         seq_manager.start_measure_requested.emit()
         seq_manager.action_completed_event.wait(timeout=10)
-
         if not seq_manager.action_success:
             context['error'] = "Échec du démarrage de la mesure PULSE."
             return StateError, context
-
         return StateWaitForMeasure, context
 
 
@@ -99,22 +98,17 @@ class StateWaitForMeasure(State):
         pulse = seq_manager.pulse
         timeout = 60
         start_time = time.time()
-
         self.logger.info("Attente de la fin de la mesure par PULSE...")
-
         while not pulse.is_measurement_complete:
             if not seq_manager._is_running:
                 self.logger.info("Attente de mesure interrompue.")
                 return StateEnd, context
-
             if time.time() - start_time > timeout:
                 msg = "Timeout en attendant la fin de la mesure Pulse."
                 self.logger.error(msg)
                 context['error'] = msg
                 return StateError, context
-
             time.sleep(0.1)
-
         self.logger.info("Mesure PULSE confirmée comme étant terminée.")
         return StateSaveMeasure, context
 
@@ -126,15 +120,12 @@ class StateSaveMeasure(State):
         seq_manager = context['sequence_manager']
         point_index = context['current_index']
         base_filename = context.get('base_filename', 'mesure')
-
         filename = f"{base_filename}_point_{point_index + 1:03d}.txt"
         self.logger.info(f"Demande de sauvegarde vers '{filename}'")
-
         seq_manager.action_completed_event.clear()
         seq_manager.action_success = False
         seq_manager.save_measure_requested.emit(filename)
         seq_manager.action_completed_event.wait(timeout=10)
-
         if seq_manager.action_success:
             context['points'][point_index].measurement_file = seq_manager.action_message
             return StateNextPoint, context
@@ -148,8 +139,8 @@ class StateNextPoint(State):
 
     def execute(self, context):
         context['current_index'] += 1
-        activer_securite = context['sequence_params'].get('activer_securite', False)
-
+        sequence_params = context.get('sequence_params', {})
+        activer_securite = sequence_params.get('activer_securite_deplacement', False)
         if context['current_index'] < len(context['points']):
             self.logger.info("Passage au point suivant.")
             if activer_securite:
