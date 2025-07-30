@@ -86,6 +86,10 @@ class GalilDriver:
     def send_query(self, command: str, retries=2):
         for attempt in range(retries + 1):
             response = self.send_cmd(command)
+            # Si l'écho est activé, la réponse contiendra la commande. On la supprime.
+            if response is not None and command in response:
+                response = response.split('\r\n')[-1]  # Garde la dernière ligne de data
+
             if response is not None and '?' not in response and response.strip() != '':
                 return response.replace(':', '').strip()
             self.logger.info(
@@ -167,9 +171,8 @@ class RobotController:
 
     def stop_all_motion(self):
         self.logger.warning("Commande ST (Stop) envoyée pour tous les axes.")
-        self.driver.send_cmd("ST")
-        self.driver.wait_motion_complete(self.ALL_AXES)
-        self.logger.info("Mouvement stoppé. Le contrôleur est prêt pour de nouvelles commandes.")
+        self.driver.send_cmd(f"ST;AM{self.ALL_AXES}")
+        self.logger.info("Mouvement stoppé. Le contrôleur est prêt.")
 
     def reset_jog_mode(self):
         """Séquence de sortie propre du mode JOG validée par les tests."""
@@ -349,3 +352,34 @@ class RobotController:
                 self.logger.warning(f"Axe inconnu dans move_relative : {axis}")
         self.logger.info(f"Déplacement relatif vers les coordonnées cibles : {target_coords}")
         self.move_to(**target_coords)
+
+    def software_reset(self):
+        """
+        Effectue une réinitialisation logicielle du contrôleur, gère la réactivation
+        de l'écho, et réinitialise le robot à un état opérationnel.
+        """
+        self.logger.warning("Lancement d'une réinitialisation logicielle (RS) du contrôleur...")
+
+        # 1. Envoie la commande RS sans attendre de réponse.
+        self.driver.ser.write(b'RS\r')
+        self.driver.ser.flush()
+
+        # 2. Le contrôleur a besoin de temps pour redémarrer.
+        self.logger.info("Attente de 2 secondes pour le redémarrage du contrôleur...")
+        time.sleep(2)
+
+        # 3. Le buffer série peut contenir des données résiduelles du redémarrage. On le vide.
+        self.driver.ser.reset_input_buffer()
+        self.driver.ser.write(b'\r')  # Envoie un retour chariot pour obtenir un prompt ':'
+        time.sleep(0.2)
+        initial_response = self.driver.ser.read_all()
+        self.logger.debug(f"Réponse après reset: {initial_response!r}")
+
+        # 4. Le reset a réactivé l'écho. Il faut le désactiver à nouveau.
+        self.logger.info("Le contrôleur a redémarré. Re-désactivation de l'écho...")
+        self.driver._disable_echo()
+
+        # 5. Réinitialisation des moteurs et du gantry.
+        self.logger.info("Réinitialisation terminée. Réactivation des moteurs...")
+        self.enable_motors()
+        self.logger.info("Contrôleur de nouveau opérationnel.")

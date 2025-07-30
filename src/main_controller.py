@@ -38,6 +38,9 @@ class MainController(QObject):
 
     measure_action_completed = Signal(bool, str)
 
+    # NOUVEAU : Signal émis à la fin de la réinitialisation du robot
+    robot_reset_completed = Signal()
+
     def __init__(self):
         super().__init__()
         self.logger = logging.getLogger("RobotApp.MainController")
@@ -59,6 +62,16 @@ class MainController(QObject):
         self.sequence_thread = None
         self.robot_lock = threading.Lock()
         self.pulse_lock = threading.Lock()
+
+        # NOUVEAU : Drapeau pour gérer l'état de réinitialisation du robot
+        self.is_robot_busy_resetting = False
+        self.robot_reset_completed.connect(self._on_robot_reset_completed)
+
+    # NOUVEAU : Slot pour gérer la fin de la réinitialisation
+    @Slot()
+    def _on_robot_reset_completed(self):
+        self.is_robot_busy_resetting = False
+        self.log_message_sent.emit("Réinitialisation du robot terminée. Prêt pour de nouvelles commandes.")
 
     def setup_robot(self):
         try:
@@ -179,6 +192,10 @@ class MainController(QObject):
 
     @Slot()
     def add_current_position_as_point(self):
+        # MODIFIÉ : Ajout de la vérification de l'état "busy"
+        if self.is_robot_busy_resetting:
+            self.log_message_sent.emit("Action impossible : le robot est en cours de réinitialisation.")
+            return
         if not self.robot: return
         with self.robot_lock:
             current_pos = self.robot.last_positions
@@ -216,6 +233,9 @@ class MainController(QObject):
 
     @Slot()
     def start_sequence(self):
+        if self.is_robot_busy_resetting:
+            self.log_message_sent.emit("Action impossible : le robot est en cours de réinitialisation.")
+            return
         if self.sequence_thread and self.sequence_thread.isRunning(): self.log_message_sent.emit(
             "Une séquence est déjà en cours."); return
         if not self.pulse: self.log_message_sent.emit("ERREUR: Interface PULSE non prête."); return
@@ -228,8 +248,10 @@ class MainController(QObject):
             return
         self.log_message_sent.emit("Démarrage de la séquence de mesure...")
         sequence_params = {
-            'activer_securite_deplacement': self.config.getboolean('SEQUENCE', 'activer_securite_deplacement', fallback=True),
-            'hauteur_securite_deplacement_z': self.config.getfloat('SEQUENCE', 'hauteur_securite_deplacement_z', fallback=20.0),
+            'activer_securite_deplacement': self.config.getboolean('SEQUENCE', 'activer_securite_deplacement',
+                                                                   fallback=True),
+            'hauteur_securite_deplacement_z': self.config.getfloat('SEQUENCE', 'hauteur_securite_deplacement_z',
+                                                                   fallback=20.0),
             'temps_stabilisation_s': self.config.getfloat('SEQUENCE', 'temps_stabilisation_s', fallback=0.5)
         }
         self.sequence_thread = SequenceManager(self.robot, self.pulse, points, sequence_params)
@@ -323,6 +345,9 @@ class MainController(QObject):
 
     @Slot(dict)
     def move_capsule_absolute(self, capsule_coords: dict):
+        if self.is_robot_busy_resetting:
+            self.log_message_sent.emit("Action impossible : le robot est en cours de réinitialisation.")
+            return
         if not self.robot: return
         self.log_message_sent.emit(f"Déplacement capsule vers : {capsule_coords}")
         threading.Thread(target=self._execute_move_capsule_absolute, args=(capsule_coords,)).start()
@@ -337,6 +362,9 @@ class MainController(QObject):
 
     @Slot(dict)
     def define_robot_position(self, capsule_coords: dict):
+        if self.is_robot_busy_resetting:
+            self.log_message_sent.emit("Action impossible : le robot est en cours de réinitialisation.")
+            return
         if not self.robot: return
         self.log_message_sent.emit(f"Assignation de la position actuelle aux coordonnées capsule : {capsule_coords}")
         with self.robot_lock:
@@ -348,6 +376,9 @@ class MainController(QObject):
                 self.log_message_sent.emit(f"Erreur lors de l'assignation de la position : {e}")
 
     def move_robot_relative(self, axis: str, distance: float):
+        if self.is_robot_busy_resetting:
+            self.log_message_sent.emit("Action impossible : le robot est en cours de réinitialisation.")
+            return
         if not self.robot: return
         self.log_message_sent.emit(f"Déplacement relatif de {distance} sur l'axe {axis}...")
         threading.Thread(target=self._execute_move_relative, args=({axis: distance},)).start()
@@ -361,6 +392,9 @@ class MainController(QObject):
         self.robot_move_completed.emit(self.robot.last_positions)
 
     def move_robot_to_parking(self):
+        if self.is_robot_busy_resetting:
+            self.log_message_sent.emit("Action impossible : le robot est en cours de réinitialisation.")
+            return
         if not self.robot: return
         self.log_message_sent.emit("Déplacement vers la position de parking...")
         threading.Thread(target=self._execute_move_to_parking).start()
@@ -373,6 +407,9 @@ class MainController(QObject):
         self.robot_move_completed.emit(self.robot.last_positions)
 
     def set_robot_parking_position(self):
+        if self.is_robot_busy_resetting:
+            self.log_message_sent.emit("Action impossible : le robot est en cours de réinitialisation.")
+            return
         if not self.robot or not self.config: return
         with self.robot_lock:
             self.robot.update_positions()
@@ -385,6 +422,9 @@ class MainController(QObject):
             self.log_message_sent.emit(f"ERREUR: Impossible de sauvegarder le parking: {e}")
 
     def set_robot_zero_position(self):
+        if self.is_robot_busy_resetting:
+            self.log_message_sent.emit("Action impossible : le robot est en cours de réinitialisation.")
+            return
         if not self.robot: return
         with self.robot_lock:
             self.robot.define_current_position_as_zero()
@@ -393,13 +433,40 @@ class MainController(QObject):
 
     @Slot()
     def robot_jog_continuous(self, **kwargs):
-        """Démarre ou arrête un mouvement de jogging continu.
-           Accepte des arguments par mot-clé (ex: x=vitesse, phi=vitesse).
-        """
+        """Démarre ou arrête un mouvement de jogging continu."""
+        if self.is_robot_busy_resetting:
+            # Ne pas envoyer de log ici pour éviter de spammer la console pendant le JOG
+            return
         if not self.robot:
             return
         with self.robot_lock:
             self.robot.jog_continuous(**kwargs)
+
+    # MODIFIÉ : La méthode est maintenant plus robuste avec une gestion d'état
+    @Slot()
+    def reset_robot_from_jog_async(self):
+        """
+        Lance la séquence de réinitialisation du robot après un JOG dans un thread
+        séparé et gère l'état "occupé" du robot.
+        """
+        if not self.robot: return
+
+        if self.is_robot_busy_resetting:
+            self.log_message_sent.emit("Une réinitialisation du robot est déjà en cours.")
+            return
+
+        self.is_robot_busy_resetting = True
+        self.log_message_sent.emit("Lancement de la réinitialisation du robot en arrière-plan...")
+
+        def _execute_reset(controller_instance):
+            with controller_instance.robot_lock:
+                controller_instance.robot.reset_jog_mode()
+            # Émettre le signal pour indiquer la fin
+            controller_instance.robot_reset_completed.emit()
+
+        reset_thread = threading.Thread(target=_execute_reset, args=(self,), name="JogResetThread")
+        reset_thread.daemon = True
+        reset_thread.start()
 
     def save_all_configurations(self):
         try:

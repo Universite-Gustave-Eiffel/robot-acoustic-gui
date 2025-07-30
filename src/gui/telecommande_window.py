@@ -222,12 +222,15 @@ class TelecommandeWindow(QMainWindow):
         if checked:
             self.keyboard_control_button.setText("Désactiver le Contrôle Clavier (FOCUS)")
             if self.controller.robot:
+                self.controller.robot.stop_all_motion()
                 self.controller.robot.begin_jog_mode()
             self.setFocus()
         else:
             self.keyboard_control_button.setText("Activer le Contrôle Clavier")
             if self.controller.robot:
-                self.controller.robot.reset_jog_mode()
+                self.controller.log_message_sent.emit("Sortie du mode JOG, réinitialisation du contrôleur...")
+                self.controller.robot.software_reset()
+                self.controller.log_message_sent.emit("Contrôleur réinitialisé et prêt.")
             self.active_jogs.clear()
 
     @Slot(dict)
@@ -322,8 +325,19 @@ class TelecommandeWindow(QMainWindow):
             super().keyReleaseEvent(event)
 
     def closeEvent(self, event: QCloseEvent):
-        """Surchargé pour s'assurer de sortir proprement du mode Jog."""
+        """
+        Surchargé pour s'assurer de sortir proprement du mode JOG
+        et de réinitialiser le contrôleur si nécessaire.
+        """
         if self.keyboard_control_active and self.controller.robot:
-            self.controller.log_message_sent.emit("Fermeture de la télécommande: réinitialisation du mode Jog.")
-            self.controller.robot.reset_jog_mode()
+            self.controller.log_message_sent.emit("Fermeture de la télécommande: réinitialisation du contrôleur...")
+            try:
+                # On applique la même solution robuste
+                self.controller.robot.software_reset()
+                self.controller.log_message_sent.emit("Contrôleur réinitialisé et prêt.")
+                self.keyboard_control_active = False  # On met à jour l'état interne
+            except Exception as e:
+                self.controller.log_message_sent.emit(f"Erreur lors du reset à la fermeture: {e}")
+
+        # Accepte l'événement de fermeture pour que la fenêtre se ferme
         event.accept()
