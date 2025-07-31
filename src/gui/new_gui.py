@@ -253,9 +253,21 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_start_sequence_triggered(self):
         self.controller.sync_points_from_gui(self._get_table_data())
+
+        # --- MODIFICATION CLÉ ---
+        # Déterminer le point de départ
+        selected_rows = {item.row() for item in self.points_table.selectedItems()}
+        start_index = 0  # Par défaut, on commence au début
+        if len(selected_rows) > 0:
+            start_index = min(selected_rows)  # On prend la première ligne de la sélection
+
+        self.update_status_bar(f"Démarrage de la séquence à partir du point {start_index + 1}...")
+        # -------------------------
+
         missing_indices = self.controller.validate_filenames()
 
         if missing_indices:
+            # (la logique de popup reste la même)
             msg_box = QMessageBox(self)
             msg_box.setIcon(QMessageBox.Warning)
             msg_box.setWindowTitle("Noms de mesure manquants")
@@ -269,14 +281,14 @@ class MainWindow(QMainWindow):
 
             if msg_box.clickedButton() == autofill_button:
                 self.controller.autofill_filenames()
-                # La liste est rafraîchie par le signal, on peut lancer
-                QApplication.processEvents()  # On s'assure que la GUI est à jour
-                self.controller.start_sequence()
+                QApplication.processEvents()
+                self.controller.start_sequence(start_index)  # On passe l'index de départ
             else:
-                self.update_status_bar("Lancement de la séquence annulé. Veuillez remplir les noms de fichiers.")
+                self.update_status_bar("Lancement annulé.")
                 return
         else:
-            self.controller.start_sequence()
+            # On passe l'index de départ à la méthode du contrôleur
+            self.controller.start_sequence(start_index)
 
     @Slot()
     def _on_save_manual_measure_triggered(self):
@@ -357,19 +369,31 @@ class MainWindow(QMainWindow):
 
     @Slot(int)
     def highlight_table_row(self, row_index: int):
+        # On bloque les signaux pour éviter que la sélection programmatique
+        # ne déclenche d'autres événements (comme _update_point_actions_state) inutilement.
+        self.points_table.blockSignals(True)
+
         # Réinitialiser la couleur de l'ancienne ligne surlignée
         if self.current_highlighted_row != -1 and self.current_highlighted_row < self.points_table.rowCount():
             for col in range(self.points_table.columnCount()):
                 item = self.points_table.item(self.current_highlighted_row, col)
                 if item: item.setBackground(QColor("white"))
 
-        # Surligner la nouvelle ligne
         if row_index != -1 and row_index < self.points_table.rowCount():
+            # Surligner la nouvelle ligne active
             for col in range(self.points_table.columnCount()):
                 item = self.points_table.item(row_index, col)
-                if item: item.setBackground(QColor("#a8d8ea"))  # Bleu clair
+                if item: item.setBackground(QColor("#a8d8ea"))
+
+            # --- MODIFICATION CLÉ ---
+            # Sélectionner programmatiquement la ligne
+            self.points_table.selectRow(row_index)
+            # -------------------------
+
+            self.points_table.scrollToItem(self.points_table.item(row_index, 0))
 
         self.current_highlighted_row = row_index
+        self.points_table.blockSignals(False)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.controller.sync_points_from_gui(self._get_table_data())

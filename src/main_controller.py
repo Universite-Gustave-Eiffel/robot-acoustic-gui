@@ -2,9 +2,9 @@
 
 import logging
 import configparser
-import os
 import threading
 import time
+import os
 from pathlib import Path
 from PySide6.QtCore import QObject, Signal, Slot, QCoreApplication, QTimer
 
@@ -15,10 +15,8 @@ from src.sequence_manager.sequence_manager import SequenceManager
 
 
 def get_config(interface_name: str):
-    """Trouve, charge et retourne l'objet de configuration pour une interface donnée."""
     controller_file_path = Path(__file__).resolve()
     config_path = controller_file_path.parent / interface_name / 'config.ini'
-
     config = configparser.ConfigParser()
     if not config.read(config_path, encoding='utf-8'):
         raise FileNotFoundError(f"Fichier de configuration introuvable à {config_path}")
@@ -26,17 +24,13 @@ def get_config(interface_name: str):
 
 
 class MainController(QObject):
-    """Chef d'orchestre de l'application. Gère les drivers et la logique métier."""
-
     log_message_sent = Signal(str)
     robot_position_updated = Signal(dict)
     robot_move_completed = Signal(dict)
-
     point_list_changed = Signal(list)
     document_modified_status_changed = Signal(bool)
     sequence_status_changed = Signal(str)
     highlight_point_in_gui = Signal(int)
-
     measure_action_completed = Signal(bool, str)
 
     def __init__(self):
@@ -45,18 +39,14 @@ class MainController(QObject):
         self.point_manager = PointManager()
         self.current_file_path = None
         self._is_modified = False
-
         self.robot: RobotController | None = None
         self.config = None
         self.robot_config_path = None
-
         self.pulse = None
         self.pulse_config = None
-
         self.position_timer = QTimer(self)
         self.position_timer.setInterval(500)
         self.position_timer.timeout.connect(self.poll_robot_position)
-
         self.sequence_thread = None
         self.robot_lock = threading.Lock()
         self.pulse_lock = threading.Lock()
@@ -216,7 +206,6 @@ class MainController(QObject):
         self._notify_point_list_changed()
 
     def validate_filenames(self) -> list[int]:
-        """Vérifie les noms de fichiers et retourne les indices des lignes vides."""
         missing_indices = []
         for i, point in enumerate(self.point_manager.points):
             if not point.measurement_file:
@@ -224,7 +213,6 @@ class MainController(QObject):
         return missing_indices
 
     def autofill_filenames(self):
-        """Remplit automatiquement les noms de fichiers manquants."""
         for i, point in enumerate(self.point_manager.points):
             if not point.measurement_file:
                 sanitized_coords = [
@@ -236,21 +224,30 @@ class MainController(QObject):
         self.log_message_sent.emit("Noms de fichiers auto-remplis.")
         self._notify_point_list_changed()
 
-    @Slot()
-    def start_sequence(self):
-        if self.sequence_thread and self.sequence_thread.isRunning(): self.log_message_sent.emit(
-            "Une séquence est déjà en cours."); return
+    @Slot(int)
+    def start_sequence(self, start_index: int = 0):
+        if self.sequence_thread and self.sequence_thread.isRunning():
+            self.log_message_sent.emit("Une séquence est déjà en cours.")
+            return
+
         if not self.pulse: self.log_message_sent.emit("ERREUR: Interface PULSE non prête."); return
         if not self.pulse_lock.acquire(blocking=False): self.log_message_sent.emit(
             "Interface PULSE occupée par une mesure manuelle."); return
 
         points_copy = self.point_manager.get_points_copy()
+
         if not points_copy:
             self.log_message_sent.emit("Impossible de démarrer : la liste de points est vide.")
             self.pulse_lock.release()
             return
 
-        self.log_message_sent.emit("Démarrage de la séquence de mesure...")
+        if start_index >= len(points_copy):
+            self.log_message_sent.emit(f"L'index de départ ({start_index + 1}) est en dehors de la liste de points.")
+            self.pulse_lock.release()
+            return
+
+        self.log_message_sent.emit(f"Démarrage de la séquence à partir du point {start_index + 1}...")
+
         sequence_params = {
             'activer_securite_deplacement': self.config.getboolean('SEQUENCE', 'activer_securite_deplacement',
                                                                    fallback=True),
@@ -258,7 +255,10 @@ class MainController(QObject):
                                                                    fallback=20.0),
             'temps_stabilisation_s': self.config.getfloat('SEQUENCE', 'temps_stabilisation_s', fallback=0.5)
         }
+
         self.sequence_thread = SequenceManager(self.robot, self.pulse, points_copy, sequence_params)
+        self.sequence_thread.context['current_index'] = start_index
+
         self.sequence_thread.start_measure_requested.connect(self._on_start_measure_requested)
         self.sequence_thread.stop_measure_requested.connect(self._on_stop_measure_requested)
         self.sequence_thread.save_measure_requested.connect(self._on_save_measure_requested)
@@ -270,6 +270,7 @@ class MainController(QObject):
         base_name = Path(self.current_file_path).stem if self.current_file_path else "mesure_sans_nom"
         self.sequence_thread.context['base_filename'] = base_name
         self.sequence_thread.context['robot_lock'] = self.robot_lock
+
         self.sequence_thread.start()
 
     @Slot()
@@ -290,7 +291,6 @@ class MainController(QObject):
     def _on_save_measure_requested(self, filename):
         if not self.pulse: self.measure_action_completed.emit(False, "Pulse non initialisé"); return
 
-        # Gérer le cas de plusieurs mesures pour le même point
         point_index = self.sequence_thread.context['current_index']
         point = self.sequence_thread.context['points'][point_index]
         num_measurements = point.num_measurements
@@ -306,7 +306,6 @@ class MainController(QObject):
                     success = False
                     saved_filename = f"Échec de sauvegarde vers {iteration_filename}"
                     break
-                # Petite pause pour s'assurer que le système de fichiers suit
                 time.sleep(0.1)
                 if not self.sequence_thread._is_running: break
             if success:
@@ -328,6 +327,8 @@ class MainController(QObject):
     def on_sequence_finished(self, final_message: str):
         self.log_message_sent.emit(f"Séquence terminée. Statut: {final_message}")
         if self.sequence_thread:
+            results = self.sequence_thread.context['points']
+            self.logger.info(f"Résultats de la séquence: {len(results)} points traités.")
             try:
                 self.sequence_thread.start_measure_requested.disconnect()
                 self.sequence_thread.stop_measure_requested.disconnect()
@@ -338,7 +339,6 @@ class MainController(QObject):
         self.sequence_thread = None
         if self.pulse_lock.locked():
             self.pulse_lock.release()
-        # NOTE: On ne modifie PAS l'état du document ici.
 
     @Slot()
     def start_manual_measurement(self):
@@ -434,17 +434,34 @@ class MainController(QObject):
         except Exception as e:
             self.log_message_sent.emit(f"ERREUR: Impossible de sauvegarder le parking: {e}")
 
+    # --- MÉTHODE CORRIGÉE ---
     def set_robot_zero_position(self):
+        """Définit la position PHYSIQUE ACTUELLE comme étant l'origine des coordonnées CAPSULE."""
         if not self.robot: return
+
+        capsule_zero_coords = {'X': 0.0, 'Y': 0.0, 'Z': 0.0, 'THETA': 0.0, 'PHI': 0.0}
+
+        self.log_message_sent.emit("Assignation de la position actuelle aux coordonnées capsule Zéro.")
+
         with self.robot_lock:
-            self.robot.define_current_position_as_zero()
-            self.robot_move_completed.emit(self.robot.last_positions)
-        self.log_message_sent.emit("Position actuelle définie comme Zéro.")
+            try:
+                # 1. Calculer les coordonnées ROBOT qui correspondent à la CAPSULE étant à zéro.
+                robot_coords_for_zero = self.robot.calculate_robot_coords_for_capsule(**capsule_zero_coords)
+
+                # 2. Dire au contrôleur: "Ta position physique actuelle a maintenant ces coordonnées robot."
+                self.robot.define_position(**robot_coords_for_zero)
+
+                # 3. Mettre à jour l'état interne et la GUI pour refléter la nouvelle réalité.
+                self.robot.update_positions()
+                self.robot_move_completed.emit(self.robot.last_positions)
+                self.log_message_sent.emit("Position actuelle définie comme Zéro Capsule.")
+
+            except Exception as e:
+                self.log_message_sent.emit(f"Erreur lors de l'assignation de la position Zéro : {e}")
 
     @Slot()
     def robot_jog_continuous(self, **kwargs):
-        if not self.robot:
-            return
+        if not self.robot: return
         with self.robot_lock:
             self.robot.jog_continuous(**kwargs)
 
