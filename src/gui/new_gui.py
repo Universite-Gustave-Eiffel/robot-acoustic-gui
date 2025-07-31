@@ -4,6 +4,7 @@
 import sys
 import logging
 import time
+import os
 from pathlib import Path
 from typing import Optional, Dict
 
@@ -46,7 +47,6 @@ class MainWindow(QMainWindow):
 
         splash.showMessage("Connexions finales...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
         self.controller.log_message_sent.connect(self.update_status_bar)
-        # La fenêtre télécommande gère sa propre connexion au signal de position
         self.controller.point_list_changed.connect(self.update_points_table)
         self.controller.document_modified_status_changed.connect(self.update_save_action_state)
         self.controller.sequence_status_changed.connect(self.update_status_bar)
@@ -54,9 +54,9 @@ class MainWindow(QMainWindow):
 
     def _setup_ui(self) -> None:
         self.setWindowTitle('Logiciel de Pilotage Robot')
-        self.setGeometry(150, 150, 950, 600)
+        self.setGeometry(150, 150, 1200, 700)  # Fenêtre un peu plus grande
         self.setWindowIcon(QIcon(ResourceManager.get_icon_path('Window-icon.png')))
-        self.setMinimumSize(700, 500)
+        self.setMinimumSize(800, 600)
         QApplication.instance().setStyle("Fusion")
 
         self._create_actions_and_connections()
@@ -177,8 +177,10 @@ class MainWindow(QMainWindow):
 
     def _get_table_data(self) -> list[dict]:
         data = []
-        headers = [self.points_table.horizontalHeaderItem(c).text().lower().replace(" ", "_") for c in
+        headers = [self.points_table.horizontalHeaderItem(c).text().lower().replace("_", " ") for c in
                    range(self.points_table.columnCount())]
+        # Correction pour correspondre aux noms de la dataclass
+        headers = [h.replace(" ", "_") for h in headers]
         for row in range(self.points_table.rowCount()):
             row_data = {}
             for col, header in enumerate(headers):
@@ -205,15 +207,15 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_save_triggered(self) -> bool:
         self.controller.sync_points_from_gui(self._get_table_data())
-        if not self.controller.save_point_list():
+        if not self.controller.current_file_path:
             return self._on_save_as_triggered()
-        return True
+        return self.controller.save_point_list()
 
     @Slot()
     def _on_save_as_triggered(self) -> bool:
         self.controller.sync_points_from_gui(self._get_table_data())
         file_path, _ = QFileDialog.getSaveFileName(self, "Enregistrer la liste de points", "",
-                                                   "Fichier CSV (*.csv);;Tous les fichiers (*)")
+                                                   "Fichier Texte (*.txt);;Fichier CSV (*.csv);;Tous les fichiers (*)")
         if file_path:
             return self.controller.save_point_list_to_file(file_path)
         return False
@@ -225,14 +227,14 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_delete_points_triggered(self):
-        selected_rows = {item.row() for item in self.points_table.selectedItems()}
+        selected_rows = sorted(list({item.row() for item in self.points_table.selectedItems()}))
         if not selected_rows: return
         reply = QMessageBox.question(self, "Confirmation",
                                      f"Voulez-vous vraiment supprimer {len(selected_rows)} point(s) ?",
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             self.controller.sync_points_from_gui(self._get_table_data())
-            self.controller.delete_selected_points(list(selected_rows))
+            self.controller.delete_selected_points(selected_rows)
 
     @Slot()
     def _on_move_up_triggered(self):
@@ -251,7 +253,30 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_start_sequence_triggered(self):
         self.controller.sync_points_from_gui(self._get_table_data())
-        self.controller.start_sequence()
+        missing_indices = self.controller.validate_filenames()
+
+        if missing_indices:
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setWindowTitle("Noms de mesure manquants")
+            msg_box.setText(f"{len(missing_indices)} point(s) n'ont pas de nom de fichier de mesure.")
+            msg_box.setInformativeText("Voulez-vous les remplir automatiquement avant de lancer la séquence ?")
+
+            autofill_button = msg_box.addButton("Auto-remplir et Lancer", QMessageBox.AcceptRole)
+            cancel_button = msg_box.addButton("Annuler", QMessageBox.RejectRole)
+
+            msg_box.exec()
+
+            if msg_box.clickedButton() == autofill_button:
+                self.controller.autofill_filenames()
+                # La liste est rafraîchie par le signal, on peut lancer
+                QApplication.processEvents()  # On s'assure que la GUI est à jour
+                self.controller.start_sequence()
+            else:
+                self.update_status_bar("Lancement de la séquence annulé. Veuillez remplir les noms de fichiers.")
+                return
+        else:
+            self.controller.start_sequence()
 
     @Slot()
     def _on_save_manual_measure_triggered(self):
@@ -279,18 +304,16 @@ class MainWindow(QMainWindow):
         for row_index, point_data in enumerate(points):
             for col_index, header in enumerate(headers):
                 value = point_data.get(header, "")
-                if isinstance(value, float):
-                    # Affichage en nombre entier
-                    item = QTableWidgetItem(f"{round(value)}")
+                if isinstance(value, (float, int)):
+                    item = QTableWidgetItem(f"{value}")
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 else:
                     item = QTableWidgetItem(str(value))
                     item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                if header == "measurement_file":
-                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 self.points_table.setItem(row_index, col_index, item)
         self.points_table.blockSignals(False)
         self.points_table.resizeColumnsToContents()
+        self.points_table.horizontalHeader().setStretchLastSection(True)
 
     @Slot(bool)
     def update_save_action_state(self, is_modified: bool):
@@ -323,7 +346,6 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _open_config_window(self):
-        """Ouvre la fenêtre de dialogue de configuration."""
         config_dialog = ConfigWindow(self.controller, self)
         config_dialog.exec()
         self.update_status_bar("Fenêtre de configuration fermée.")
@@ -335,14 +357,18 @@ class MainWindow(QMainWindow):
 
     @Slot(int)
     def highlight_table_row(self, row_index: int):
+        # Réinitialiser la couleur de l'ancienne ligne surlignée
         if self.current_highlighted_row != -1 and self.current_highlighted_row < self.points_table.rowCount():
             for col in range(self.points_table.columnCount()):
                 item = self.points_table.item(self.current_highlighted_row, col)
                 if item: item.setBackground(QColor("white"))
+
+        # Surligner la nouvelle ligne
         if row_index != -1 and row_index < self.points_table.rowCount():
             for col in range(self.points_table.columnCount()):
                 item = self.points_table.item(row_index, col)
-                if item: item.setBackground(QColor("#a8d8ea"))
+                if item: item.setBackground(QColor("#a8d8ea"))  # Bleu clair
+
         self.current_highlighted_row = row_index
 
     def closeEvent(self, event: QCloseEvent) -> None:
@@ -366,6 +392,9 @@ class MainWindow(QMainWindow):
 def main() -> int:
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s - %(name)s - %(levelname)s - (%(threadName)s) %(message)s')
+    # Pour débugger, passer à logging.DEBUG
+    # logging.getLogger("RobotApp").setLevel(logging.DEBUG)
+
     app = QApplication(sys.argv)
 
     pixmap = ResourceManager.get_pixmap('splash.png')
