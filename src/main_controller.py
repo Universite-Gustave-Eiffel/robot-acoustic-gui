@@ -178,7 +178,6 @@ class MainController(QObject):
             if not current_pos:
                 self.log_message_sent.emit("Position actuelle du robot inconnue.")
                 return
-
             new_point = Point(
                 x=round(current_pos.get('X', 0.0)),
                 y=round(current_pos.get('Y', 0.0)),
@@ -220,7 +219,6 @@ class MainController(QObject):
                     [point.x, point.y, point.z, point.theta, point.phi]
                 ]
                 point.measurement_file = f"point_{i + 1}_{'_'.join(sanitized_coords)}"
-
         self.log_message_sent.emit("Noms de fichiers auto-remplis.")
         self._notify_point_list_changed()
 
@@ -434,28 +432,17 @@ class MainController(QObject):
         except Exception as e:
             self.log_message_sent.emit(f"ERREUR: Impossible de sauvegarder le parking: {e}")
 
-    # --- MÉTHODE CORRIGÉE ---
     def set_robot_zero_position(self):
-        """Définit la position PHYSIQUE ACTUELLE comme étant l'origine des coordonnées CAPSULE."""
         if not self.robot: return
-
         capsule_zero_coords = {'X': 0.0, 'Y': 0.0, 'Z': 0.0, 'THETA': 0.0, 'PHI': 0.0}
-
         self.log_message_sent.emit("Assignation de la position actuelle aux coordonnées capsule Zéro.")
-
         with self.robot_lock:
             try:
-                # 1. Calculer les coordonnées ROBOT qui correspondent à la CAPSULE étant à zéro.
                 robot_coords_for_zero = self.robot.calculate_robot_coords_for_capsule(**capsule_zero_coords)
-
-                # 2. Dire au contrôleur: "Ta position physique actuelle a maintenant ces coordonnées robot."
                 self.robot.define_position(**robot_coords_for_zero)
-
-                # 3. Mettre à jour l'état interne et la GUI pour refléter la nouvelle réalité.
                 self.robot.update_positions()
                 self.robot_move_completed.emit(self.robot.last_positions)
                 self.log_message_sent.emit("Position actuelle définie comme Zéro Capsule.")
-
             except Exception as e:
                 self.log_message_sent.emit(f"Erreur lors de l'assignation de la position Zéro : {e}")
 
@@ -471,14 +458,12 @@ class MainController(QObject):
                 with open(self.robot_config_path, 'w', encoding='utf-8') as configfile:
                     self.config.write(configfile)
                 self.logger.info(f"Configuration robot sauvegardée dans {self.robot_config_path}")
-
             if self.pulse_config:
                 controller_file_path = Path(__file__).resolve()
                 pulse_config_path = controller_file_path.parent / 'labshop_interface' / 'config.ini'
                 with open(pulse_config_path, 'w', encoding='utf-8') as configfile:
                     self.pulse_config.write(configfile)
                 self.logger.info(f"Configuration PULSE sauvegardée dans {pulse_config_path}")
-
             self.log_message_sent.emit("Configurations sauvegardées avec succès.")
         except Exception as e:
             self.logger.error(f"Erreur lors de la sauvegarde des configurations : {e}", exc_info=True)

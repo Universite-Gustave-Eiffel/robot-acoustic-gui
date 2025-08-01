@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QIcon, QFont, QAction, QCloseEvent, QColor, QPixmap
 from PySide6.QtCore import Qt, QSize, Slot, QCoreApplication
 
-# Imports des modules de l'application
 from src.main_controller import MainController
 from src.gui.config_window import ConfigWindow
 from src.gui.telecommande_window import TelecommandeWindow
@@ -32,6 +31,7 @@ class MainWindow(QMainWindow):
         self.telecommande_window: Optional[TelecommandeWindow] = None
         self._actions: Dict[str, QAction] = {}
         self.current_highlighted_row = -1
+        self._is_sequence_running = False
         self._setup_ui()
 
     def setup_controller_and_signals(self, splash: QSplashScreen):
@@ -49,12 +49,12 @@ class MainWindow(QMainWindow):
         self.controller.log_message_sent.connect(self.update_status_bar)
         self.controller.point_list_changed.connect(self.update_points_table)
         self.controller.document_modified_status_changed.connect(self.update_save_action_state)
-        self.controller.sequence_status_changed.connect(self.update_status_bar)
+        self.controller.sequence_status_changed.connect(self._handle_sequence_state)
         self.controller.highlight_point_in_gui.connect(self.highlight_table_row)
 
     def _setup_ui(self) -> None:
         self.setWindowTitle('Logiciel de Pilotage Robot')
-        self.setGeometry(150, 150, 1200, 700)  # Fenêtre un peu plus grande
+        self.setGeometry(150, 150, 1200, 700)
         self.setWindowIcon(QIcon(ResourceManager.get_icon_path('Window-icon.png')))
         self.setMinimumSize(800, 600)
         QApplication.instance().setStyle("Fusion")
@@ -64,6 +64,10 @@ class MainWindow(QMainWindow):
         self._create_toolbars()
         self._create_central_widget()
         self._create_statusbar()
+
+        self.update_save_action_state(False)
+        self._update_point_actions_state()
+        self._update_ui_for_sequence_state()
 
     def _add_action(self, name, icon, text, tip, shortcut=None, slot=None):
         action = QAction(QIcon(ResourceManager.get_icon_path(icon)), text, self)
@@ -95,15 +99,18 @@ class MainWindow(QMainWindow):
                          slot=self._on_move_up_triggered)
         self._add_action('move_point_down', 'arrow_down.png', "Descendre", "Déplacer vers le bas",
                          slot=self._on_move_down_triggered)
-        self._add_action('start_sequence', 'play.png', 'Démarrer séquence', "Démarrer la séquence de mesure",
+
+        self._add_action('start_sequence', 'play.png', 'Démarrer / Reprendre',
+                         "Démarrer ou reprendre la séquence à partir du point sélectionné",
                          slot=self._on_start_sequence_triggered)
-        self._add_action('stop_sequence', 'pause.png', 'Arrêter séquence', "Arrêter la séquence en cours",
+        self._add_action('stop_sequence', 'pause.png', 'Arrêter la séquence',
+                         "Arrête la séquence après l'étape en cours",
                          slot=self.controller.stop_sequence)
+
         self._add_action('start_manual_measure', 'start_measurement.png', 'Démarrer mesure manuelle',
                          "Démarrer une mesure PULSE unique", slot=self.controller.start_manual_measurement)
         self._add_action('save_manual_measure', 'save_measurement.png', 'Sauvegarder mesure manuelle',
                          "Sauvegarder la dernière mesure manuelle", slot=self._on_save_manual_measure_triggered)
-        self.update_save_action_state(False)
 
     def _create_menus(self) -> None:
         menu_bar = self.menuBar()
@@ -113,10 +120,8 @@ class MainWindow(QMainWindow):
         menu_fichier.addAction(self._actions['enregistrer_sous'])
         menu_fichier.addSeparator()
         menu_fichier.addAction(self._actions['quitter'])
-
         menu_edition = menu_bar.addMenu('&Édition')
         menu_edition.addAction(self._actions['config'])
-
         menu_outils = menu_bar.addMenu('&Outils')
         menu_outils.addAction(self._actions['telecommande'])
 
@@ -139,14 +144,11 @@ class MainWindow(QMainWindow):
         self.manual_filename_edit.setToolTip("Nom du fichier pour la prochaine mesure manuelle")
         toolbar_manual.addWidget(self.manual_filename_edit)
         toolbar_manual.addAction(self._actions['save_manual_measure'])
-
         self.addToolBarBreak()
-
         toolbar_robot = QToolBar("Outils Robot")
         self.addToolBar(toolbar_robot)
         toolbar_robot.addWidget(QLabel("Robot : "))
         toolbar_robot.addAction(self._actions['goto_parking'])
-
         toolbar_edition = QToolBar("Édition Liste")
         toolbar_edition.setOrientation(Qt.Orientation.Vertical)
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, toolbar_edition)
@@ -170,7 +172,6 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.points_table)
         self.points_table.itemSelectionChanged.connect(self._update_point_actions_state)
         self.points_table.cellChanged.connect(lambda: self.controller.set_document_modified(True))
-        self._update_point_actions_state()
 
     def _create_statusbar(self) -> None:
         self.statusBar().showMessage('Prêt')
@@ -179,7 +180,6 @@ class MainWindow(QMainWindow):
         data = []
         headers = [self.points_table.horizontalHeaderItem(c).text().lower().replace("_", " ") for c in
                    range(self.points_table.columnCount())]
-        # Correction pour correspondre aux noms de la dataclass
         headers = [h.replace(" ", "_") for h in headers]
         for row in range(self.points_table.rowCount()):
             row_data = {}
@@ -188,6 +188,107 @@ class MainWindow(QMainWindow):
                 row_data[header] = item.text() if item else ""
             data.append(row_data)
         return data
+
+    @Slot()
+    def _on_start_sequence_triggered(self):
+        if self._is_sequence_running:
+            self.update_status_bar("Reprise de la séquence (à implémenter)...")
+            return
+
+        self.controller.sync_points_from_gui(self._get_table_data())
+        selected_rows = {item.row() for item in self.points_table.selectedItems()}
+        start_index = 0
+        if len(selected_rows) > 0:
+            start_index = min(selected_rows)
+
+        missing_indices = self.controller.validate_filenames()
+        if missing_indices:
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setWindowTitle("Noms de mesure manquants")
+            msg_box.setText(f"{len(missing_indices)} point(s) n'ont pas de nom de fichier de mesure.")
+            msg_box.setInformativeText("Voulez-vous les remplir automatiquement avant de lancer la séquence ?")
+            autofill_button = msg_box.addButton("Auto-remplir et Lancer", QMessageBox.AcceptRole)
+            cancel_button = msg_box.addButton("Annuler", QMessageBox.RejectRole)
+            msg_box.exec()
+            if msg_box.clickedButton() == autofill_button:
+                self.controller.autofill_filenames()
+                QApplication.processEvents()
+                self._is_sequence_running = True
+                self._update_ui_for_sequence_state()
+                self.controller.start_sequence(start_index)
+            else:
+                self.update_status_bar("Lancement annulé.")
+                return
+        else:
+            self._is_sequence_running = True
+            self._update_ui_for_sequence_state()
+            self.controller.start_sequence(start_index)
+
+    @Slot(str)
+    def _handle_sequence_state(self, status: str):
+        self.update_status_bar(status)
+        if "Démarrage" in status:
+            self._is_sequence_running = True
+        elif "Séquence terminée" in status or "ERREUR" in status or "arrêtée" in status:
+            self._is_sequence_running = False
+        self._update_ui_for_sequence_state()
+
+    def _update_ui_for_sequence_state(self):
+        running = self._is_sequence_running
+        self._actions['start_sequence'].setEnabled(not running)
+        self._actions['stop_sequence'].setEnabled(running)  # C'est le bouton Pause/Arrêt doux
+
+        self._actions['add_point'].setEnabled(not running)
+        self._actions['delete_point'].setEnabled(not running)
+        self._actions['move_point_up'].setEnabled(not running)
+        self._actions['move_point_down'].setEnabled(not running)
+
+        self._actions['ouvrir'].setEnabled(not running)
+        self._actions['enregistrer'].setEnabled(not running and self.controller.is_modified)
+        self._actions['enregistrer_sous'].setEnabled(not running)
+
+        self.points_table.setEditTriggers(
+            QAbstractItemView.NoEditTriggers if running else QAbstractItemView.DoubleClicked
+        )
+        self._update_point_actions_state()
+
+    @Slot(int)
+    def highlight_table_row(self, row_index: int):
+        self.points_table.blockSignals(True)
+        if self.current_highlighted_row != -1 and self.current_highlighted_row < self.points_table.rowCount():
+            for col in range(self.points_table.columnCount()):
+                item = self.points_table.item(self.current_highlighted_row, col)
+                if item: item.setBackground(QColor("white"))
+        if row_index != -1 and row_index < self.points_table.rowCount():
+            for col in range(self.points_table.columnCount()):
+                item = self.points_table.item(row_index, col)
+                if item: item.setBackground(QColor("#a8d8ea"))
+            self.points_table.selectRow(row_index)
+            self.points_table.scrollToItem(self.points_table.item(row_index, 0))
+        self.current_highlighted_row = row_index
+        self.points_table.blockSignals(False)
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if self._is_sequence_running:
+            QMessageBox.warning(self, "Séquence en cours", "Veuillez d'abord arrêter la séquence avant de quitter.")
+            event.ignore()
+            return
+        self.controller.sync_points_from_gui(self._get_table_data())
+        if self.controller.is_modified:
+            reply = QMessageBox.question(self, "Quitter",
+                                         "Des modifications n'ont pas été sauvegardées.\nVoulez-vous les enregistrer avant de quitter ?",
+                                         QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
+            if reply == QMessageBox.StandardButton.Save:
+                if not self._on_save_triggered():
+                    event.ignore()
+                    return
+            elif reply == QMessageBox.StandardButton.Cancel:
+                event.ignore()
+                return
+        self.controller.disconnect_robot()
+        if self.telecommande_window: self.telecommande_window.close()
+        event.accept()
 
     @Slot()
     def _open_point_file_dialog(self):
@@ -251,46 +352,6 @@ class MainWindow(QMainWindow):
             self.controller.move_selected_point_down(list(selected_rows)[0])
 
     @Slot()
-    def _on_start_sequence_triggered(self):
-        self.controller.sync_points_from_gui(self._get_table_data())
-
-        # --- MODIFICATION CLÉ ---
-        # Déterminer le point de départ
-        selected_rows = {item.row() for item in self.points_table.selectedItems()}
-        start_index = 0  # Par défaut, on commence au début
-        if len(selected_rows) > 0:
-            start_index = min(selected_rows)  # On prend la première ligne de la sélection
-
-        self.update_status_bar(f"Démarrage de la séquence à partir du point {start_index + 1}...")
-        # -------------------------
-
-        missing_indices = self.controller.validate_filenames()
-
-        if missing_indices:
-            # (la logique de popup reste la même)
-            msg_box = QMessageBox(self)
-            msg_box.setIcon(QMessageBox.Warning)
-            msg_box.setWindowTitle("Noms de mesure manquants")
-            msg_box.setText(f"{len(missing_indices)} point(s) n'ont pas de nom de fichier de mesure.")
-            msg_box.setInformativeText("Voulez-vous les remplir automatiquement avant de lancer la séquence ?")
-
-            autofill_button = msg_box.addButton("Auto-remplir et Lancer", QMessageBox.AcceptRole)
-            cancel_button = msg_box.addButton("Annuler", QMessageBox.RejectRole)
-
-            msg_box.exec()
-
-            if msg_box.clickedButton() == autofill_button:
-                self.controller.autofill_filenames()
-                QApplication.processEvents()
-                self.controller.start_sequence(start_index)  # On passe l'index de départ
-            else:
-                self.update_status_bar("Lancement annulé.")
-                return
-        else:
-            # On passe l'index de départ à la méthode du contrôleur
-            self.controller.start_sequence(start_index)
-
-    @Slot()
     def _on_save_manual_measure_triggered(self):
         filename = self.manual_filename_edit.text()
         if not filename:
@@ -326,25 +387,28 @@ class MainWindow(QMainWindow):
         self.points_table.blockSignals(False)
         self.points_table.resizeColumnsToContents()
         self.points_table.horizontalHeader().setStretchLastSection(True)
+        self._update_point_actions_state()
 
     @Slot(bool)
     def update_save_action_state(self, is_modified: bool):
-        self._actions['enregistrer'].setEnabled(is_modified)
         title = self.windowTitle().replace(" *", "")
         if is_modified:
-            self.setWindowTitle(title + " *")
-        else:
-            self.setWindowTitle(title)
+            title += " *"
+        self.setWindowTitle(title)
+        self._update_ui_for_sequence_state()
 
     def _update_point_actions_state(self):
         selected_items = self.points_table.selectedItems()
         selected_rows = {item.row() for item in selected_items}
         has_selection = len(selected_rows) > 0
         single_selection = len(selected_rows) == 1
-        self._actions['delete_point'].setEnabled(has_selection)
-        self._actions['move_point_up'].setEnabled(single_selection and list(selected_rows)[0] > 0)
+
+        is_running = self._is_sequence_running
+        self._actions['delete_point'].setEnabled(has_selection and not is_running)
+        self._actions['move_point_up'].setEnabled(single_selection and list(selected_rows)[0] > 0 and not is_running)
         self._actions['move_point_down'].setEnabled(
-            single_selection and list(selected_rows)[0] < self.points_table.rowCount() - 1)
+            single_selection and list(selected_rows)[0] < self.points_table.rowCount() - 1 and not is_running
+        )
 
     @Slot()
     def _open_telecommande(self):
@@ -367,75 +431,17 @@ class MainWindow(QMainWindow):
         print(f"[GUI Log] {message}")
         self.statusBar().showMessage(message, 5000)
 
-    @Slot(int)
-    def highlight_table_row(self, row_index: int):
-        # On bloque les signaux pour éviter que la sélection programmatique
-        # ne déclenche d'autres événements (comme _update_point_actions_state) inutilement.
-        self.points_table.blockSignals(True)
 
-        # Réinitialiser la couleur de l'ancienne ligne surlignée
-        if self.current_highlighted_row != -1 and self.current_highlighted_row < self.points_table.rowCount():
-            for col in range(self.points_table.columnCount()):
-                item = self.points_table.item(self.current_highlighted_row, col)
-                if item: item.setBackground(QColor("white"))
-
-        if row_index != -1 and row_index < self.points_table.rowCount():
-            # Surligner la nouvelle ligne active
-            for col in range(self.points_table.columnCount()):
-                item = self.points_table.item(row_index, col)
-                if item: item.setBackground(QColor("#a8d8ea"))
-
-            # --- MODIFICATION CLÉ ---
-            # Sélectionner programmatiquement la ligne
-            self.points_table.selectRow(row_index)
-            # -------------------------
-
-            self.points_table.scrollToItem(self.points_table.item(row_index, 0))
-
-        self.current_highlighted_row = row_index
-        self.points_table.blockSignals(False)
-
-    def closeEvent(self, event: QCloseEvent) -> None:
-        self.controller.sync_points_from_gui(self._get_table_data())
-        if self.controller.is_modified:
-            reply = QMessageBox.question(self, "Quitter",
-                                         "Des modifications n'ont pas été sauvegardées.\nVoulez-vous les enregistrer avant de quitter ?",
-                                         QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
-            if reply == QMessageBox.StandardButton.Save:
-                if not self._on_save_triggered():
-                    event.ignore()
-                    return
-            elif reply == QMessageBox.StandardButton.Cancel:
-                event.ignore()
-                return
-        self.controller.disconnect_robot()
-        if self.telecommande_window: self.telecommande_window.close()
-        event.accept()
-
-
-def main() -> int:
+if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s - %(name)s - %(levelname)s - (%(threadName)s) %(message)s')
-    # Pour débugger, passer à logging.DEBUG
-    # logging.getLogger("RobotApp").setLevel(logging.DEBUG)
-
     app = QApplication(sys.argv)
-
     pixmap = ResourceManager.get_pixmap('splash.png')
     splash = QSplashScreen(pixmap)
     splash.show()
     app.processEvents()
-
     fenetre = MainWindow()
-
-    splash.showMessage("Initialisation du matériel...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
     fenetre.setup_controller_and_signals(splash)
-
     fenetre.show()
     splash.finish(fenetre)
-
-    return app.exec()
-
-
-if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit(app.exec())
