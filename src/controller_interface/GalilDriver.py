@@ -86,7 +86,6 @@ class GalilDriver:
     def send_query(self, command: str, retries=2):
         for attempt in range(retries + 1):
             response = self.send_cmd(command)
-            # Gère le cas où l'écho est activé par un reset
             if response is not None and command in response:
                 response = response.split('\r\n')[-1]
 

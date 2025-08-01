@@ -7,21 +7,19 @@ from .states import StateIdle, StateMoveToPoint, StateEnd, StateError, StateSecu
 
 
 class SequenceManager(QThread):
-    """Gère l'exécution d'une séquence de mesure en émettant des signaux pour les actions matérielles."""
-
     status_changed = Signal(str)
     active_point_changed = Signal(int)
-    sequence_completed = Signal(str)
-
+    sequence_completed = Signal(str, int)
     start_measure_requested = Signal()
     stop_measure_requested = Signal()
     save_measure_requested = Signal(str)
 
-    def __init__(self, robot, pulse, points, sequence_params):
+    def __init__(self, robot, pulse, points, sequence_params, single_shot=False):
         super().__init__()
         self.robot = robot
         self.pulse = pulse
         self.current_state = None
+        self.single_shot = single_shot
         self.context = {
             'points': points,
             'current_index': 0,
@@ -32,7 +30,6 @@ class SequenceManager(QThread):
         }
         self._is_running = False
         self.logger = logging.getLogger("RobotApp.SequenceManager")
-
         self.action_completed_event = threading.Event()
         self.action_success = False
         self.action_message = ""
@@ -47,18 +44,20 @@ class SequenceManager(QThread):
         final_message = "Séquence terminée avec succès."
         self._is_running = True
 
-        # Décider de l'état initial en fonction de la sécurité
-        if self.context['sequence_params'].get('activer_securite', False):
+        activer_securite = self.context['sequence_params'].get('activer_securite_deplacement', False)
+        # Ne pas faire de mouvement de sécu si on est déjà au premier point d'une séquence complète
+        # ou si on exécute une mesure unique.
+        if activer_securite and self.context['current_index'] > 0 and not self.single_shot:
             self.current_state = StateSecurityMove(self.robot)
         else:
             self.current_state = StateMoveToPoint(self.robot)
 
         try:
-            while self._is_running and not isinstance(self.current_state, StateEnd):
+            while self._is_running and not isinstance(self.current_state, (StateEnd, StateIdle)):
                 point_index = self.context['current_index']
                 total_points = len(self.context['points'])
                 status_message = f"État : {self.current_state.name}"
-                if not isinstance(self.current_state, (StateIdle, StateEnd)):
+                if not isinstance(self.current_state, (StateEnd, StateIdle)):
                     status_message += f" | Point : {point_index + 1}/{total_points}"
 
                 self.status_changed.emit(status_message)
@@ -69,13 +68,7 @@ class SequenceManager(QThread):
                     self.active_point_changed.emit(-1)
 
                 next_state_class, self.context = self.current_state.execute(self.context)
-
-                if not self.action_success and self.current_state.name in ["StateStartMeasure", "StateStopMeasure",
-                                                                           "StateSaveMeasure"]:
-                    self.context['error'] = self.action_message
-                    self.current_state = StateError(self.robot)
-                else:
-                    self.current_state = next_state_class(self.robot)
+                self.current_state = next_state_class(self.robot)
 
         except Exception as e:
             final_message = f"Erreur inattendue dans la séquence : {e}"
@@ -92,8 +85,9 @@ class SequenceManager(QThread):
         else:
             self.status_changed.emit(final_message)
 
+        next_point_index = self.context.get('current_index', 0)
         self.active_point_changed.emit(-1)
-        self.sequence_completed.emit(final_message)
+        self.sequence_completed.emit(final_message, next_point_index)
         self._is_running = False
 
     def stop(self):

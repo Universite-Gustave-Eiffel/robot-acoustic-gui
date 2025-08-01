@@ -32,6 +32,7 @@ class MainController(QObject):
     sequence_status_changed = Signal(str)
     highlight_point_in_gui = Signal(int)
     measure_action_completed = Signal(bool, str)
+    sequence_finished_with_next_point = Signal(str, int)
 
     def __init__(self):
         super().__init__()
@@ -222,29 +223,30 @@ class MainController(QObject):
         self.log_message_sent.emit("Noms de fichiers auto-remplis.")
         self._notify_point_list_changed()
 
-    @Slot(int)
-    def start_sequence(self, start_index: int = 0):
+    def _start_sequence_thread(self, points, start_index=0, single_shot=False):
         if self.sequence_thread and self.sequence_thread.isRunning():
             self.log_message_sent.emit("Une séquence est déjà en cours.")
             return
 
-        if not self.pulse: self.log_message_sent.emit("ERREUR: Interface PULSE non prête."); return
-        if not self.pulse_lock.acquire(blocking=False): self.log_message_sent.emit(
-            "Interface PULSE occupée par une mesure manuelle."); return
+        if not self.pulse:
+            self.log_message_sent.emit("ERREUR: Interface PULSE non prête.")
+            return
 
-        points_copy = self.point_manager.get_points_copy()
+        if not self.pulse_lock.acquire(blocking=False):
+            self.log_message_sent.emit("Interface PULSE occupée.")
+            return
 
-        if not points_copy:
+        if not points:
             self.log_message_sent.emit("Impossible de démarrer : la liste de points est vide.")
             self.pulse_lock.release()
             return
 
-        if start_index >= len(points_copy):
-            self.log_message_sent.emit(f"L'index de départ ({start_index + 1}) est en dehors de la liste de points.")
+        if start_index >= len(points):
+            self.log_message_sent.emit(f"L'index de départ ({start_index + 1}) est hors limites.")
             self.pulse_lock.release()
             return
 
-        self.log_message_sent.emit(f"Démarrage de la séquence à partir du point {start_index + 1}...")
+        self.log_message_sent.emit(f"Démarrage de la séquence au point {start_index + 1}...")
 
         sequence_params = {
             'activer_securite_deplacement': self.config.getboolean('SEQUENCE', 'activer_securite_deplacement',
@@ -254,22 +256,31 @@ class MainController(QObject):
             'temps_stabilisation_s': self.config.getfloat('SEQUENCE', 'temps_stabilisation_s', fallback=0.5)
         }
 
-        self.sequence_thread = SequenceManager(self.robot, self.pulse, points_copy, sequence_params)
+        self.sequence_thread = SequenceManager(self.robot, self.pulse, points, sequence_params, single_shot)
         self.sequence_thread.context['current_index'] = start_index
 
+        self.sequence_thread.sequence_completed.connect(self.on_sequence_finished)
         self.sequence_thread.start_measure_requested.connect(self._on_start_measure_requested)
-        self.sequence_thread.stop_measure_requested.connect(self._on_stop_measure_requested)
         self.sequence_thread.save_measure_requested.connect(self._on_save_measure_requested)
         self.measure_action_completed.connect(self.sequence_thread.on_measure_action_completed)
         self.sequence_thread.active_point_changed.connect(self.highlight_point_in_gui)
         self.sequence_thread.status_changed.connect(self.sequence_status_changed)
-        self.sequence_thread.sequence_completed.connect(self.on_sequence_finished)
 
-        base_name = Path(self.current_file_path).stem if self.current_file_path else "mesure_sans_nom"
+        base_name = Path(self.current_file_path).stem if self.current_file_path else "mesure"
         self.sequence_thread.context['base_filename'] = base_name
         self.sequence_thread.context['robot_lock'] = self.robot_lock
 
         self.sequence_thread.start()
+
+    @Slot(int)
+    def start_full_sequence(self, start_index: int = 0):
+        points_copy = self.point_manager.get_points_copy()
+        self._start_sequence_thread(points_copy, start_index, single_shot=False)
+
+    @Slot(int)
+    def start_single_point_sequence(self, index: int):
+        points_copy = self.point_manager.get_points_copy()
+        self._start_sequence_thread(points_copy, index, single_shot=True)
 
     @Slot()
     def _on_start_measure_requested(self):
@@ -288,14 +299,11 @@ class MainController(QObject):
     @Slot(str)
     def _on_save_measure_requested(self, filename):
         if not self.pulse: self.measure_action_completed.emit(False, "Pulse non initialisé"); return
-
         point_index = self.sequence_thread.context['current_index']
         point = self.sequence_thread.context['points'][point_index]
         num_measurements = point.num_measurements
-
         success = True
         saved_filename = filename
-
         if num_measurements > 1:
             base, ext = os.path.splitext(filename)
             for i in range(num_measurements):
@@ -312,7 +320,6 @@ class MainController(QObject):
             if not self.pulse.save_function_group_ascii(filename):
                 success = False
                 saved_filename = f"Échec de sauvegarde vers {filename}"
-
         self.measure_action_completed.emit(success, saved_filename)
 
     @Slot()
@@ -321,12 +328,12 @@ class MainController(QObject):
             self.log_message_sent.emit("Demande d'arrêt de la séquence...")
             self.sequence_thread.stop()
 
-    @Slot(str)
-    def on_sequence_finished(self, final_message: str):
+    @Slot(str, int)
+    def on_sequence_finished(self, final_message: str, next_point_index: int):
         self.log_message_sent.emit(f"Séquence terminée. Statut: {final_message}")
+        self.sequence_finished_with_next_point.emit(final_message, next_point_index)
+
         if self.sequence_thread:
-            results = self.sequence_thread.context['points']
-            self.logger.info(f"Résultats de la séquence: {len(results)} points traités.")
             try:
                 self.sequence_thread.start_measure_requested.disconnect()
                 self.sequence_thread.stop_measure_requested.disconnect()
@@ -341,8 +348,7 @@ class MainController(QObject):
     @Slot()
     def start_manual_measurement(self):
         if not self.pulse: self.log_message_sent.emit("Impossible de mesurer : interface PULSE non prête."); return
-        if not self.pulse_lock.acquire(blocking=False): self.log_message_sent.emit(
-            "Interface PULSE occupée par la séquence."); return
+        if not self.pulse_lock.acquire(blocking=False): self.log_message_sent.emit("Interface PULSE occupée."); return
         try:
             if self.pulse.is_measurement_active: self.log_message_sent.emit(
                 "Une mesure manuelle est déjà en cours."); return
@@ -357,8 +363,7 @@ class MainController(QObject):
     @Slot(str)
     def save_manual_measurement(self, filename: str):
         if not self.pulse: self.log_message_sent.emit("Impossible de sauvegarder : interface PULSE non prête."); return
-        if not self.pulse_lock.acquire(blocking=False): self.log_message_sent.emit(
-            "Interface PULSE occupée par la séquence."); return
+        if not self.pulse_lock.acquire(blocking=False): self.log_message_sent.emit("Interface PULSE occupée."); return
         try:
             self.pulse.stop_measurement()
             time.sleep(0.5)

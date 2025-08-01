@@ -51,6 +51,7 @@ class MainWindow(QMainWindow):
         self.controller.document_modified_status_changed.connect(self.update_save_action_state)
         self.controller.sequence_status_changed.connect(self._handle_sequence_state)
         self.controller.highlight_point_in_gui.connect(self.highlight_table_row)
+        self.controller.sequence_finished_with_next_point.connect(self.on_single_point_sequence_finished)
 
     def _setup_ui(self) -> None:
         self.setWindowTitle('Logiciel de Pilotage Robot')
@@ -100,9 +101,12 @@ class MainWindow(QMainWindow):
         self._add_action('move_point_down', 'arrow_down.png', "Descendre", "Déplacer vers le bas",
                          slot=self._on_move_down_triggered)
 
-        self._add_action('start_sequence', 'play.png', 'Démarrer / Reprendre',
-                         "Démarrer ou reprendre la séquence à partir du point sélectionné",
-                         slot=self._on_start_sequence_triggered)
+        self._add_action('start_sequence', 'play.png', 'Démarrer Séquence',
+                         "Démarrer la séquence à partir du point sélectionné",
+                         slot=self._on_start_full_sequence_triggered)
+        self._add_action('next_point', 'next.png', 'Mesurer Point Suivant',
+                         "Exécute la mesure pour le point sélectionné uniquement",
+                         slot=self._on_next_point_triggered)
         self._add_action('stop_sequence', 'pause.png', 'Arrêter la séquence',
                          "Arrête la séquence après l'étape en cours",
                          slot=self.controller.stop_sequence)
@@ -135,6 +139,7 @@ class MainWindow(QMainWindow):
         toolbar_sequence = QToolBar("Séquence")
         self.addToolBar(toolbar_sequence)
         toolbar_sequence.addAction(self._actions['start_sequence'])
+        toolbar_sequence.addAction(self._actions['next_point'])
         toolbar_sequence.addAction(self._actions['stop_sequence'])
 
         toolbar_manual = QToolBar("Mesure Manuelle")
@@ -189,16 +194,11 @@ class MainWindow(QMainWindow):
             data.append(row_data)
         return data
 
-    @Slot()
-    def _on_start_sequence_triggered(self):
-        if self._is_sequence_running:
-            self.update_status_bar("Reprise de la séquence (à implémenter)...")
-            return
-
+    def _start_sequence_common(self, start_method):
         self.controller.sync_points_from_gui(self._get_table_data())
         selected_rows = {item.row() for item in self.points_table.selectedItems()}
         start_index = 0
-        if len(selected_rows) > 0:
+        if selected_rows:
             start_index = min(selected_rows)
 
         missing_indices = self.controller.validate_filenames()
@@ -207,23 +207,29 @@ class MainWindow(QMainWindow):
             msg_box.setIcon(QMessageBox.Warning)
             msg_box.setWindowTitle("Noms de mesure manquants")
             msg_box.setText(f"{len(missing_indices)} point(s) n'ont pas de nom de fichier de mesure.")
-            msg_box.setInformativeText("Voulez-vous les remplir automatiquement avant de lancer la séquence ?")
-            autofill_button = msg_box.addButton("Auto-remplir et Lancer", QMessageBox.AcceptRole)
+            msg_box.setInformativeText("Voulez-vous les remplir automatiquement ?")
+            autofill_button = msg_box.addButton("Auto-remplir", QMessageBox.AcceptRole)
             cancel_button = msg_box.addButton("Annuler", QMessageBox.RejectRole)
             msg_box.exec()
+
             if msg_box.clickedButton() == autofill_button:
                 self.controller.autofill_filenames()
                 QApplication.processEvents()
-                self._is_sequence_running = True
-                self._update_ui_for_sequence_state()
-                self.controller.start_sequence(start_index)
             else:
-                self.update_status_bar("Lancement annulé.")
+                self.update_status_bar("Action annulée. Veuillez remplir les noms de fichiers.")
                 return
-        else:
-            self._is_sequence_running = True
-            self._update_ui_for_sequence_state()
-            self.controller.start_sequence(start_index)
+
+        self._is_sequence_running = True
+        self._update_ui_for_sequence_state()
+        start_method(start_index)
+
+    @Slot()
+    def _on_start_full_sequence_triggered(self):
+        self._start_sequence_common(self.controller.start_full_sequence)
+
+    @Slot()
+    def _on_next_point_triggered(self):
+        self._start_sequence_common(self.controller.start_single_point_sequence)
 
     @Slot(str)
     def _handle_sequence_state(self, status: str):
@@ -234,10 +240,16 @@ class MainWindow(QMainWindow):
             self._is_sequence_running = False
         self._update_ui_for_sequence_state()
 
+    @Slot(str, int)
+    def on_single_point_sequence_finished(self, final_message: str, next_point_index: int):
+        if next_point_index < self.points_table.rowCount():
+            self.points_table.selectRow(next_point_index)
+
     def _update_ui_for_sequence_state(self):
         running = self._is_sequence_running
         self._actions['start_sequence'].setEnabled(not running)
-        self._actions['stop_sequence'].setEnabled(running)  # C'est le bouton Pause/Arrêt doux
+        self._actions['next_point'].setEnabled(not running)
+        self._actions['stop_sequence'].setEnabled(running)
 
         self._actions['add_point'].setEnabled(not running)
         self._actions['delete_point'].setEnabled(not running)
@@ -409,6 +421,7 @@ class MainWindow(QMainWindow):
         self._actions['move_point_down'].setEnabled(
             single_selection and list(selected_rows)[0] < self.points_table.rowCount() - 1 and not is_running
         )
+        self._actions['next_point'].setEnabled(has_selection and not is_running)
 
     @Slot()
     def _open_telecommande(self):
