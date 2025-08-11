@@ -74,8 +74,7 @@ class TelecommandeWindow(QMainWindow):
         toolbar = QToolBar("Commandes de Référence")
         self.addToolBar(toolbar)
         stop_action = QAction(QIcon(ResourceManager.get_icon_path('stop.png')), "Arrêt d'Urgence", self)
-        stop_action.triggered.connect(
-            lambda: self.controller.robot.stop_all_motion() if self.controller.robot else None)
+        stop_action.triggered.connect(self.controller.emergency_stop)
         toolbar.addAction(stop_action)
         toolbar.addSeparator()
         set_zero_action = QAction(QIcon(ResourceManager.get_icon_path('set_zero.png')), "Définir Zéro Actuel", self)
