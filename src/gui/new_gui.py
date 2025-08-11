@@ -108,6 +108,9 @@ class MainWindow(QMainWindow):
         self._add_action('pause_sequence', 'pause.png', 'Arrêter la séquence',
                          "Arrête la séquence après l'étape en cours",
                          slot=self.controller.stop_sequence)
+        self._add_action('stop_sequence', 'stop.png', 'Arrêt d Urgence',
+                         "Arrêter immédiatement tout mouvement et la séquence",
+                         slot=self.controller.emergency_stop)
 
         self._add_action('start_manual_measure', 'start_measurement.png', 'Démarrer mesure manuelle',
                          "Démarrer une mesure PULSE unique", slot=self.controller.start_manual_measurement)
@@ -138,6 +141,7 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar_sequence)
         toolbar_sequence.addAction(self._actions['start_sequence'])
         toolbar_sequence.addAction(self._actions['pause_sequence'])
+        toolbar_sequence.addAction(self._actions['stop_sequence'])
         toolbar_sequence.addAction(self._actions['next_point'])
 
         toolbar_manual = QToolBar("Mesure Manuelle")
@@ -249,18 +253,21 @@ class MainWindow(QMainWindow):
         selected_items = self.points_table.selectedItems()
         selected_rows = {item.row() for item in selected_items}
         has_selection = len(selected_rows) > 0
-        single_selection = len(selected_rows) == 1
 
+        # Séquence
         self._actions['start_sequence'].setEnabled(not running and has_points)
         self._actions['next_point'].setEnabled(not running and has_selection)
         self._actions['pause_sequence'].setEnabled(running)
+        self._actions['stop_sequence'].setEnabled(running)
 
+        # Édition de liste
         self._actions['add_point'].setEnabled(not running)
         self._actions['delete_point'].setEnabled(not running and has_selection)
-        self._actions['move_point_up'].setEnabled(not running and single_selection and list(selected_rows)[0] > 0)
+        self._actions['move_point_up'].setEnabled(not running and has_selection and list(selected_rows)[0] > 0)
         self._actions['move_point_down'].setEnabled(
-            not running and single_selection and list(selected_rows)[0] < self.points_table.rowCount() - 1)
+            not running and has_selection and list(selected_rows)[0] < self.points_table.rowCount() - 1)
 
+        # Fichier
         self._actions['ouvrir'].setEnabled(not running)
         self._actions['enregistrer'].setEnabled(not running and self.controller.is_modified)
         self._actions['enregistrer_sous'].setEnabled(not running)
