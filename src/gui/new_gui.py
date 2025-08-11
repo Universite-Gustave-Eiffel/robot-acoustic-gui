@@ -66,9 +66,7 @@ class MainWindow(QMainWindow):
         self._create_central_widget()
         self._create_statusbar()
 
-        self.update_save_action_state(False)
-        self._update_point_actions_state()
-        self._update_ui_for_sequence_state()
+        self._update_actions_state()  # Appel initial pour tout mettre dans le bon état
 
     def _add_action(self, name, icon, text, tip, shortcut=None, slot=None):
         action = QAction(QIcon(ResourceManager.get_icon_path(icon)), text, self)
@@ -107,7 +105,7 @@ class MainWindow(QMainWindow):
         self._add_action('next_point', 'next.png', 'Mesurer Point Suivant',
                          "Exécute la mesure pour le point sélectionné uniquement",
                          slot=self._on_next_point_triggered)
-        self._add_action('stop_sequence', 'pause.png', 'Arrêter la séquence',
+        self._add_action('pause_sequence', 'pause.png', 'Arrêter la séquence',
                          "Arrête la séquence après l'étape en cours",
                          slot=self.controller.stop_sequence)
 
@@ -139,8 +137,8 @@ class MainWindow(QMainWindow):
         toolbar_sequence = QToolBar("Séquence")
         self.addToolBar(toolbar_sequence)
         toolbar_sequence.addAction(self._actions['start_sequence'])
+        toolbar_sequence.addAction(self._actions['pause_sequence'])
         toolbar_sequence.addAction(self._actions['next_point'])
-        toolbar_sequence.addAction(self._actions['stop_sequence'])
 
         toolbar_manual = QToolBar("Mesure Manuelle")
         self.addToolBar(toolbar_manual)
@@ -175,7 +173,7 @@ class MainWindow(QMainWindow):
         self.points_table.verticalHeader().setVisible(True)
         self.points_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         main_layout.addWidget(self.points_table)
-        self.points_table.itemSelectionChanged.connect(self._update_point_actions_state)
+        self.points_table.itemSelectionChanged.connect(self._update_actions_state)
         self.points_table.cellChanged.connect(lambda: self.controller.set_document_modified(True))
 
     def _create_statusbar(self) -> None:
@@ -220,7 +218,7 @@ class MainWindow(QMainWindow):
                 return
 
         self._is_sequence_running = True
-        self._update_ui_for_sequence_state()
+        self._update_actions_state()
         start_method(start_index)
 
     @Slot()
@@ -238,32 +236,43 @@ class MainWindow(QMainWindow):
             self._is_sequence_running = True
         elif "Séquence terminée" in status or "ERREUR" in status or "arrêtée" in status:
             self._is_sequence_running = False
-        self._update_ui_for_sequence_state()
+        self._update_actions_state()
 
     @Slot(str, int)
     def on_single_point_sequence_finished(self, final_message: str, next_point_index: int):
         if next_point_index < self.points_table.rowCount():
             self.points_table.selectRow(next_point_index)
 
-    def _update_ui_for_sequence_state(self):
+    def _update_actions_state(self):
+        """Méthode centrale pour mettre à jour l'état de tous les boutons."""
         running = self._is_sequence_running
-        self._actions['start_sequence'].setEnabled(not running)
-        self._actions['next_point'].setEnabled(not running)
-        self._actions['stop_sequence'].setEnabled(running)
+        has_points = self.points_table.rowCount() > 0
+        selected_items = self.points_table.selectedItems()
+        selected_rows = {item.row() for item in selected_items}
+        has_selection = len(selected_rows) > 0
+        single_selection = len(selected_rows) == 1
 
+        # Séquence
+        self._actions['start_sequence'].setEnabled(not running and has_points)
+        self._actions['next_point'].setEnabled(not running and has_selection)
+        self._actions['pause_sequence'].setEnabled(running)
+
+        # Édition de liste
         self._actions['add_point'].setEnabled(not running)
-        self._actions['delete_point'].setEnabled(not running)
-        self._actions['move_point_up'].setEnabled(not running)
-        self._actions['move_point_down'].setEnabled(not running)
+        self._actions['delete_point'].setEnabled(not running and has_selection)
+        self._actions['move_point_up'].setEnabled(not running and single_selection and list(selected_rows)[0] > 0)
+        self._actions['move_point_down'].setEnabled(
+            not running and single_selection and list(selected_rows)[0] < self.points_table.rowCount() - 1)
 
+        # Fichier
         self._actions['ouvrir'].setEnabled(not running)
         self._actions['enregistrer'].setEnabled(not running and self.controller.is_modified)
         self._actions['enregistrer_sous'].setEnabled(not running)
 
+        # Rendre la table non éditable pendant l'exécution
         self.points_table.setEditTriggers(
             QAbstractItemView.NoEditTriggers if running else QAbstractItemView.DoubleClicked
         )
-        self._update_point_actions_state()
 
     @Slot(int)
     def highlight_table_row(self, row_index: int):
@@ -384,6 +393,7 @@ class MainWindow(QMainWindow):
         self.points_table.setHorizontalHeaderLabels([h.upper().replace("_", " ") for h in headers])
         if not points:
             self.points_table.blockSignals(False)
+            self._update_actions_state()  # Mettre à jour l'état si la table est vidée
             return
         self.points_table.setRowCount(len(points))
         for row_index, point_data in enumerate(points):
@@ -399,7 +409,7 @@ class MainWindow(QMainWindow):
         self.points_table.blockSignals(False)
         self.points_table.resizeColumnsToContents()
         self.points_table.horizontalHeader().setStretchLastSection(True)
-        self._update_point_actions_state()
+        self._update_actions_state()
 
     @Slot(bool)
     def update_save_action_state(self, is_modified: bool):
@@ -407,21 +417,7 @@ class MainWindow(QMainWindow):
         if is_modified:
             title += " *"
         self.setWindowTitle(title)
-        self._update_ui_for_sequence_state()
-
-    def _update_point_actions_state(self):
-        selected_items = self.points_table.selectedItems()
-        selected_rows = {item.row() for item in selected_items}
-        has_selection = len(selected_rows) > 0
-        single_selection = len(selected_rows) == 1
-
-        is_running = self._is_sequence_running
-        self._actions['delete_point'].setEnabled(has_selection and not is_running)
-        self._actions['move_point_up'].setEnabled(single_selection and list(selected_rows)[0] > 0 and not is_running)
-        self._actions['move_point_down'].setEnabled(
-            single_selection and list(selected_rows)[0] < self.points_table.rowCount() - 1 and not is_running
-        )
-        self._actions['next_point'].setEnabled(has_selection and not is_running)
+        self._update_actions_state()
 
     @Slot()
     def _open_telecommande(self):
