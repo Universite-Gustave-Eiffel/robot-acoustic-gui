@@ -66,7 +66,7 @@ class MainWindow(QMainWindow):
         self._create_central_widget()
         self._create_statusbar()
 
-        self._update_actions_state()  # Appel initial pour tout mettre dans le bon état
+        self._update_actions_state()
 
     def _add_action(self, name, icon, text, tip, shortcut=None, slot=None):
         action = QAction(QIcon(ResourceManager.get_icon_path(icon)), text, self)
@@ -244,7 +244,6 @@ class MainWindow(QMainWindow):
             self.points_table.selectRow(next_point_index)
 
     def _update_actions_state(self):
-        """Méthode centrale pour mettre à jour l'état de tous les boutons."""
         running = self._is_sequence_running
         has_points = self.points_table.rowCount() > 0
         selected_items = self.points_table.selectedItems()
@@ -252,24 +251,20 @@ class MainWindow(QMainWindow):
         has_selection = len(selected_rows) > 0
         single_selection = len(selected_rows) == 1
 
-        # Séquence
         self._actions['start_sequence'].setEnabled(not running and has_points)
         self._actions['next_point'].setEnabled(not running and has_selection)
         self._actions['pause_sequence'].setEnabled(running)
 
-        # Édition de liste
         self._actions['add_point'].setEnabled(not running)
         self._actions['delete_point'].setEnabled(not running and has_selection)
         self._actions['move_point_up'].setEnabled(not running and single_selection and list(selected_rows)[0] > 0)
         self._actions['move_point_down'].setEnabled(
             not running and single_selection and list(selected_rows)[0] < self.points_table.rowCount() - 1)
 
-        # Fichier
         self._actions['ouvrir'].setEnabled(not running)
         self._actions['enregistrer'].setEnabled(not running and self.controller.is_modified)
         self._actions['enregistrer_sous'].setEnabled(not running)
 
-        # Rendre la table non éditable pendant l'exécution
         self.points_table.setEditTriggers(
             QAbstractItemView.NoEditTriggers if running else QAbstractItemView.DoubleClicked
         )
@@ -393,7 +388,7 @@ class MainWindow(QMainWindow):
         self.points_table.setHorizontalHeaderLabels([h.upper().replace("_", " ") for h in headers])
         if not points:
             self.points_table.blockSignals(False)
-            self._update_actions_state()  # Mettre à jour l'état si la table est vidée
+            self._update_actions_state()
             return
         self.points_table.setRowCount(len(points))
         for row_index, point_data in enumerate(points):

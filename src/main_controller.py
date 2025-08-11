@@ -125,7 +125,9 @@ class MainController(QObject):
             self.log_message_sent.emit("ERREUR: Impossible de se connecter au robot.")
 
     def disconnect_robot(self):
-        self.stop_sequence()
+        if self.sequence_thread and self.sequence_thread.isRunning():
+            self.emergency_stop()
+
         if self.position_timer: self.position_timer.stop()
         if self.pulse:
             self.pulse.close()
@@ -262,6 +264,7 @@ class MainController(QObject):
         self.sequence_thread.sequence_completed.connect(self.on_sequence_finished)
         self.sequence_thread.start_measure_requested.connect(self._on_start_measure_requested)
         self.sequence_thread.save_measure_requested.connect(self._on_save_measure_requested)
+        self.sequence_thread.stop_robot_requested.connect(self.robot.stop_all_motion)
         self.measure_action_completed.connect(self.sequence_thread.on_measure_action_completed)
         self.sequence_thread.active_point_changed.connect(self.highlight_point_in_gui)
         self.sequence_thread.status_changed.connect(self.sequence_status_changed)
@@ -325,8 +328,23 @@ class MainController(QObject):
     @Slot()
     def stop_sequence(self):
         if self.sequence_thread and self.sequence_thread.isRunning():
-            self.log_message_sent.emit("Demande d'arrêt de la séquence...")
+            self.log_message_sent.emit("Demande d'arrêt (doux) de la séquence...")
             self.sequence_thread.stop()
+
+    @Slot()
+    def toggle_pause_sequence(self):
+        if self.sequence_thread and self.sequence_thread.isRunning():
+            self.sequence_thread.toggle_pause()
+
+    @Slot()
+    def emergency_stop(self):
+        self.log_message_sent.emit("ARRÊT D'URGENCE DÉCLENCHÉ !")
+        if self.sequence_thread and self.sequence_thread.isRunning():
+            self.sequence_thread.stop()
+        if self.robot:
+            threading.Thread(target=self.robot.abort_all_motion, daemon=True).start()
+        if self.pulse_lock.locked():
+            self.pulse_lock.release()
 
     @Slot(str, int)
     def on_sequence_finished(self, final_message: str, next_point_index: int):
@@ -336,8 +354,8 @@ class MainController(QObject):
         if self.sequence_thread:
             try:
                 self.sequence_thread.start_measure_requested.disconnect()
-                self.sequence_thread.stop_measure_requested.disconnect()
                 self.sequence_thread.save_measure_requested.disconnect()
+                self.sequence_thread.stop_robot_requested.disconnect()
                 self.measure_action_completed.disconnect(self.sequence_thread.on_measure_action_completed)
             except RuntimeError as e:
                 self.logger.warning(f"Erreur lors de la déconnexion des signaux : {e}")

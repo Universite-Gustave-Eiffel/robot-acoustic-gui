@@ -108,31 +108,6 @@ class GalilDriver:
                 self.logger.error(f"Erreur parsing _TP, réponse: '{response}'")
         return None
 
-    def wait_motion_complete(self, axes_str, timeout=45.0):
-        if not self.is_connected or not axes_str: return
-        self.logger.info(f"Attente fin de mouvement pour axes: {axes_str} (timeout={timeout}s)...")
-        self.send_cmd(f"AM{axes_str}", timeout_override=timeout)
-        self.logger.info(f"Profil de mouvement (AM) terminé pour {axes_str}.")
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            all_axes_stopped = True
-            for axis in axes_str:
-                response = self.send_query(f"MG _BG{axis}")
-                try:
-                    if response is not None and float(response) != 0:
-                        all_axes_stopped = False
-                        break
-                except (ValueError, TypeError):
-                    self.logger.warning(f"Réponse invalide pour _BG{axis}: '{response}'")
-                    all_axes_stopped = False
-                    break
-            if all_axes_stopped:
-                self.logger.info("Tous les axes sont physiquement à l'arrêt.")
-                time.sleep(0.2)
-                return
-            time.sleep(0.1)
-        self.logger.error(f"Timeout dépassé en attendant l'arrêt physique des axes {axes_str}.")
-
 
 class RobotController:
     AXIS_MAPPING = {'X': 'A', 'Y': 'C', 'Z': 'D', 'THETA': 'E', 'PHI': 'F'}
@@ -146,6 +121,7 @@ class RobotController:
         self.robot_pos = {name: 0.0 for name in self.AXIS_MAPPING.keys()}
         self.capsule_pos = {'X': 0.0, 'Y': 0.0, 'Z': 0.0}
         self.last_positions = {name: 0.0 for name in self.AXIS_MAPPING.keys()}
+        self.active_moving_axes = ""
 
     def connect(self):
         return self.driver.connect()
@@ -171,11 +147,14 @@ class RobotController:
     def stop_all_motion(self):
         self.logger.warning("Commande ST (Stop) envoyée pour tous les axes.")
         self.driver.send_cmd("ST")
-        self.driver.wait_motion_complete(self.ALL_AXES)
-        self.logger.info("Mouvement stoppé. Le contrôleur est prêt pour de nouvelles commandes.")
+        self.active_moving_axes = ""
+
+    def abort_all_motion(self):
+        self.logger.critical("COMMANDE D'ARRÊT D'URGENCE (AB) ENVOYÉE !")
+        self.driver.send_cmd("AB")
+        self.active_moving_axes = ""
 
     def reset_jog_mode(self):
-        """Séquence de sortie propre du mode JOG validée par les tests."""
         self.logger.info("Réinitialisation de l'état après le mode JOG...")
         self.driver.send_cmd(f"ST {self.ALL_AXES}")
         self.driver.send_cmd(f"MO {self.ALL_AXES}")
@@ -253,37 +232,60 @@ class RobotController:
         robot_z = z_p - corr_t_z
         return {'X': robot_x, 'Y': robot_y, 'Z': robot_z, 'THETA': THETA, 'PHI': PHI}
 
-    def move_to(self, **kwargs):
+    def start_move_to(self, **kwargs) -> str:
         axes_to_command = set()
         pa_values = [''] * len(AXES_ORDER)
         for name, value in kwargs.items():
             name_up = name.upper()
             if name_up in self.AXIS_MAPPING:
                 axis_letter = self.AXIS_MAPPING[name_up]
-                if axis_letter == AXIS_X_GANTRY_SLAVE:
-                    continue
+                if axis_letter == AXIS_X_GANTRY_SLAVE: continue
                 steps = self._to_steps(name_up, value)
                 pa_values[AXES_ORDER.index(axis_letter)] = str(steps)
                 axes_to_command.add(axis_letter)
 
         if not axes_to_command:
-            self.logger.warning("move_to appelé sans coordonnées valides.")
-            return
+            self.logger.warning("start_move_to appelé sans coordonnées valides.")
+            return ""
 
         axes_to_wait_for = axes_to_command.copy()
         if AXIS_X_GANTRY_MASTER in axes_to_command:
             axes_to_wait_for.add(AXIS_X_GANTRY_SLAVE)
 
         axes_to_begin_str = "".join(sorted(list(axes_to_command)))
-        axes_to_wait_str = "".join(sorted(list(axes_to_wait_for)))
+        self.active_moving_axes = "".join(sorted(list(axes_to_wait_for)))
 
         cmd_pa = f"PA {','.join(pa_values)}"
-        self.logger.info(f"Mouvement Absolu: {cmd_pa} | BG {axes_to_begin_str} | Wait for {axes_to_wait_str}")
+        full_command = f"{cmd_pa};BG {axes_to_begin_str}"
+        self.logger.info(f"Démarrage Mouvement Absolu: {full_command}")
+        self.driver.send_cmd(full_command)
+        return self.active_moving_axes
 
-        self.driver.send_cmd(cmd_pa)
-        self.driver.send_cmd(f"BG {axes_to_begin_str}")
-        self.driver.wait_motion_complete(axes_to_wait_str)
+    def is_motion_complete(self) -> bool:
+        if not self.active_moving_axes:
+            return True
+
+        for axis in self.active_moving_axes:
+            response = self.driver.send_query(f"MG _BG{axis}")
+            try:
+                if response is not None and float(response) != 0:
+                    return False
+            except (ValueError, TypeError):
+                return False
+
+        self.logger.info(f"Mouvement terminé pour les axes: {self.active_moving_axes}")
+        self.active_moving_axes = ""
         self.update_positions()
+        return True
+
+    def _wait_for_motion_blocking(self):
+        """Méthode de commodité pour les mouvements manuels bloquants."""
+        while not self.is_motion_complete():
+            time.sleep(0.1)
+
+    def move_to(self, **kwargs):
+        self.start_move_to(**kwargs)
+        self._wait_for_motion_blocking()
 
     def go_home(self):
         self.logger.info("Retour à l'origine...")
