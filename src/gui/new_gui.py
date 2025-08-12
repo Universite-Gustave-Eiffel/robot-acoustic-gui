@@ -15,22 +15,17 @@ from PySide6.QtWidgets import (
     QHeaderView, QTableWidgetItem, QPushButton, QFileDialog, QSplashScreen,
     QAbstractItemView, QStyledItemDelegate
 )
-from PySide6.QtGui import QIcon, QFont, QAction, QCloseEvent, QColor, QPixmap, QIntValidator
+from PySide6.QtGui import QIcon, QFont, QAction, QCloseEvent, QColor, QPixmap, QIntValidator, QUndoStack
 from PySide6.QtCore import Qt, QSize, Slot, QCoreApplication
 
 from src.main_controller import MainController
 from src.gui.config_window import ConfigWindow
 from src.gui.telecommande_window import TelecommandeWindow
 from src.gui.resource_manager import ResourceManager
+from src.gui.commands import AddPointCommand, DeletePointsCommand, MovePointCommand, ChangeCellCommand
 
 
-# --- CLASSE AJOUTÉE ICI ---
 class IntegerDelegate(QStyledItemDelegate):
-    """
-    Un delegate pour s'assurer que seules des valeurs numériques (entiers)
-    peuvent être entrées dans les colonnes spécifiées d'un QTableWidget.
-    """
-
     def createEditor(self, parent, option, index):
         editor = QLineEdit(parent)
         validator = QIntValidator(parent)
@@ -45,9 +40,6 @@ class IntegerDelegate(QStyledItemDelegate):
         model.setData(index, editor.text())
 
 
-# -------------------------
-
-
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -56,6 +48,9 @@ class MainWindow(QMainWindow):
         self._actions: Dict[str, QAction] = {}
         self.current_highlighted_row = -1
         self._is_sequence_running = False
+
+        self.undo_stack = QUndoStack(self)
+
         self._setup_ui()
 
     def setup_controller_and_signals(self, splash: QSplashScreen):
@@ -76,6 +71,10 @@ class MainWindow(QMainWindow):
         self.controller.sequence_status_changed.connect(self._handle_sequence_state)
         self.controller.highlight_point_in_gui.connect(self.highlight_table_row)
         self.controller.sequence_finished_with_next_point.connect(self.on_single_point_sequence_finished)
+
+        self.undo_stack.canUndoChanged.connect(self._actions['undo'].setEnabled)
+        self.undo_stack.canRedoChanged.connect(self._actions['redo'].setEnabled)
+        self.undo_stack.cleanChanged.connect(lambda is_clean: self.controller.set_document_modified(not is_clean))
 
     def _setup_ui(self) -> None:
         self.setWindowTitle('Logiciel de Pilotage Robot')
@@ -101,6 +100,7 @@ class MainWindow(QMainWindow):
         return action
 
     def _create_actions_and_connections(self) -> None:
+        # Fichier
         self._add_action('quitter', 'exit.png', '&Quitter', "Quitter l'application", 'Ctrl+Q', self.close)
         self._add_action('config', 'settings.png', 'Configuration...', "Configurer l'application",
                          slot=self._open_config_window)
@@ -110,6 +110,20 @@ class MainWindow(QMainWindow):
                          self._on_save_triggered)
         self._add_action('enregistrer_sous', 'save_as.png', 'Enregistrer &sous...', "Enregistrer sous un nouveau nom",
                          slot=self._on_save_as_triggered)
+
+        # Édition
+        self._add_action('undo', 'undo.png', 'Annuler', "Annuler la dernière action", 'Ctrl+Z', self.undo_stack.undo)
+        self._add_action('redo', 'redo.png', 'Rétablir', "Rétablir la dernière action annulée", 'Ctrl+Y',
+                         self.undo_stack.redo)
+
+        # --- CORRECTION ---
+        # On désactive les boutons manuellement à la création.
+        # Ils seront automatiquement réactivés par le QUndoStack dès qu'une action sera ajoutée.
+        self._actions['undo'].setEnabled(False)
+        self._actions['redo'].setEnabled(False)
+        # --------------------
+
+        # Outils & Robot
         self._add_action('telecommande', 'joystick.png', 'Télécommande', "Ouvrir la télécommande",
                          slot=self._open_telecommande)
         self._add_action('goto_parking', 'goto_parking.png', 'Aller au parking', "Aller au parking",
@@ -118,8 +132,9 @@ class MainWindow(QMainWindow):
                          "Déplace le robot vers le point sélectionné dans la liste",
                          slot=self._on_goto_selected_point_triggered)
         self._add_action('goto_zero', 'goto_zero.png', 'Aller au Zéro',
-                         "Déplace le robot aux coordonnées capsule 0,0,0,0,0",
-                         slot=self._on_goto_zero_triggered)
+                         "Déplace le robot aux coordonnées capsule 0,0,0,0,0", slot=self._on_goto_zero_triggered)
+
+        # Édition de liste
         self._add_action('add_point', 'add.png', "Ajouter point", "Ajouter un nouveau point à la fin",
                          slot=self._on_add_point_triggered)
         self._add_action('delete_point', 'minus.png', "Supprimer point(s)", "Supprimer le(s) point(s) sélectionné(s)",
@@ -129,19 +144,16 @@ class MainWindow(QMainWindow):
         self._add_action('move_point_down', 'arrow_down.png', "Descendre", "Déplacer vers le bas",
                          slot=self._on_move_down_triggered)
 
+        # Séquence
         self._add_action('start_sequence', 'play.png', 'Démarrer Séquence',
                          "Démarrer la séquence à partir du point sélectionné",
                          slot=self._on_start_full_sequence_triggered)
         self._add_action('next_point', 'next.png', 'Mesurer Point Suivant',
-                         "Exécute la mesure pour le point sélectionné uniquement",
-                         slot=self._on_next_point_triggered)
+                         "Exécute la mesure pour le point sélectionné uniquement", slot=self._on_next_point_triggered)
         self._add_action('pause_sequence', 'pause.png', 'Arrêter la séquence',
-                         "Arrête la séquence après l'étape en cours",
-                         slot=self.controller.stop_sequence)
-        self._add_action('stop_sequence', 'stop.png', 'Arrêt d Urgence',
-                         "Arrêter immédiatement tout mouvement et la séquence",
-                         slot=self.controller.emergency_stop)
+                         "Arrête la séquence après l'étape en cours", slot=self.controller.stop_sequence)
 
+        # Mesure manuelle
         self._add_action('start_manual_measure', 'start_measurement.png', 'Démarrer mesure manuelle',
                          "Démarrer une mesure PULSE unique", slot=self.controller.start_manual_measurement)
         self._add_action('save_manual_measure', 'save_measurement.png', 'Sauvegarder mesure manuelle',
@@ -156,6 +168,9 @@ class MainWindow(QMainWindow):
         menu_fichier.addSeparator()
         menu_fichier.addAction(self._actions['quitter'])
         menu_edition = menu_bar.addMenu('&Édition')
+        menu_edition.addAction(self._actions['undo'])
+        menu_edition.addAction(self._actions['redo'])
+        menu_edition.addSeparator()
         menu_edition.addAction(self._actions['config'])
         menu_outils = menu_bar.addMenu('&Outils')
         menu_outils.addAction(self._actions['telecommande'])
@@ -165,13 +180,17 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar_file)
         toolbar_file.addAction(self._actions['ouvrir'])
         toolbar_file.addAction(self._actions['enregistrer'])
-        toolbar_file.addAction(self._actions['config'])
+
+        toolbar_edit = QToolBar("Édition")
+        self.addToolBar(toolbar_edit)
+        toolbar_edit.addAction(self._actions['undo'])
+        toolbar_edit.addAction(self._actions['redo'])
+        toolbar_edit.addAction(self._actions['config'])
 
         toolbar_sequence = QToolBar("Séquence")
         self.addToolBar(toolbar_sequence)
         toolbar_sequence.addAction(self._actions['start_sequence'])
         toolbar_sequence.addAction(self._actions['pause_sequence'])
-        toolbar_sequence.addAction(self._actions['stop_sequence'])
         toolbar_sequence.addAction(self._actions['next_point'])
 
         toolbar_manual = QToolBar("Mesure Manuelle")
@@ -182,7 +201,12 @@ class MainWindow(QMainWindow):
         toolbar_manual.addWidget(self.manual_filename_edit)
         toolbar_manual.addAction(self._actions['save_manual_measure'])
         self.addToolBarBreak()
-
+        toolbar_robot = QToolBar("Outils Robot")
+        self.addToolBar(toolbar_robot)
+        toolbar_robot.addWidget(QLabel("Robot : "))
+        toolbar_robot.addAction(self._actions['goto_parking'])
+        toolbar_robot.addAction(self._actions['goto_zero'])
+        toolbar_robot.addAction(self._actions['goto_selected'])
         toolbar_edition = QToolBar("Édition Liste")
         toolbar_edition.setOrientation(Qt.Orientation.Vertical)
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, toolbar_edition)
@@ -191,13 +215,6 @@ class MainWindow(QMainWindow):
         toolbar_edition.addSeparator()
         toolbar_edition.addAction(self._actions['move_point_up'])
         toolbar_edition.addAction(self._actions['move_point_down'])
-
-        toolbar_robot = QToolBar("Outils Robot")
-        self.addToolBar(toolbar_robot)
-        toolbar_robot.addWidget(QLabel("Robot : "))
-        toolbar_robot.addAction(self._actions['goto_parking'])
-        toolbar_robot.addAction(self._actions['goto_zero'])
-        toolbar_robot.addAction(self._actions['goto_selected'])
 
     def _create_central_widget(self) -> None:
         central_widget = QWidget(self)
@@ -212,7 +229,7 @@ class MainWindow(QMainWindow):
         self.points_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         main_layout.addWidget(self.points_table)
         self.points_table.itemSelectionChanged.connect(self._update_actions_state)
-        self.points_table.cellChanged.connect(lambda: self.controller.set_document_modified(True))
+        self.points_table.itemChanged.connect(self._on_cell_changed)
 
     def _create_statusbar(self) -> None:
         self.statusBar().showMessage('Prêt')
@@ -273,15 +290,12 @@ class MainWindow(QMainWindow):
         if len(selected_rows) != 1:
             self.update_status_bar("Veuillez sélectionner une seule ligne de destination.")
             return
-
         selected_row = list(selected_rows)[0]
-
         point_data = {}
         for col in range(self.points_table.columnCount()):
             header = self.points_table.horizontalHeaderItem(col).text().lower().replace(" ", "_")
             item = self.points_table.item(selected_row, col)
             point_data[header] = item.text() if item else "0.0"
-
         self.update_status_bar(f"Déplacement vers le point {selected_row + 1}...")
         self.controller.move_to_point_data(point_data)
 
@@ -316,7 +330,6 @@ class MainWindow(QMainWindow):
         self._actions['start_sequence'].setEnabled(not running and has_points)
         self._actions['next_point'].setEnabled(not running and single_selection)
         self._actions['pause_sequence'].setEnabled(running)
-        self._actions['stop_sequence'].setEnabled(running)
 
         self._actions['add_point'].setEnabled(not running)
         self._actions['delete_point'].setEnabled(not running and has_selection)
@@ -327,7 +340,6 @@ class MainWindow(QMainWindow):
         self._actions['ouvrir'].setEnabled(not running)
         self._actions['enregistrer'].setEnabled(not running and self.controller.is_modified)
         self._actions['enregistrer_sous'].setEnabled(not running)
-
         self._actions['goto_parking'].setEnabled(not running)
         self._actions['goto_zero'].setEnabled(not running)
         self._actions['goto_selected'].setEnabled(not running and single_selection)
@@ -358,7 +370,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         self.controller.sync_points_from_gui(self._get_table_data())
-        if self.controller.is_modified:
+        if not self.undo_stack.isClean():
             reply = QMessageBox.question(self, "Quitter",
                                          "Des modifications n'ont pas été sauvegardées.\nVoulez-vous les enregistrer avant de quitter ?",
                                          QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
@@ -375,25 +387,31 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _open_point_file_dialog(self):
-        if self.controller.is_modified:
+        if not self.undo_stack.isClean():
             reply = QMessageBox.question(self, "Modifications non sauvegardées",
                                          "Voulez-vous sauvegarder vos modifications avant d'ouvrir un nouveau fichier ?",
                                          QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
             if reply == QMessageBox.StandardButton.Save:
-                if not self._on_save_triggered():
-                    return
+                if not self._on_save_triggered(): return
             elif reply == QMessageBox.StandardButton.Cancel:
                 return
+
         file_path, _ = QFileDialog.getOpenFileName(self, "Ouvrir une liste de points", "",
                                                    "Fichiers de données (*.csv *.txt);;Tous les fichiers (*)")
-        if file_path: self.controller.process_loaded_file(file_path)
+        if file_path:
+            self.controller.process_loaded_file(file_path)
+            self.undo_stack.clear()
 
     @Slot()
     def _on_save_triggered(self) -> bool:
         self.controller.sync_points_from_gui(self._get_table_data())
-        if not self.controller.current_file_path:
+        if self.controller.current_file_path:
+            success = self.controller.save_point_list_to_file(self.controller.current_file_path)
+            if success:
+                self.undo_stack.setClean()
+            return success
+        else:
             return self._on_save_as_triggered()
-        return self.controller.save_point_list()
 
     @Slot()
     def _on_save_as_triggered(self) -> bool:
@@ -401,38 +419,59 @@ class MainWindow(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(self, "Enregistrer la liste de points", "",
                                                    "Fichier Texte (*.txt);;Fichier CSV (*.csv);;Tous les fichiers (*)")
         if file_path:
-            return self.controller.save_point_list_to_file(file_path)
+            success = self.controller.save_point_list_to_file(file_path)
+            if success:
+                self.undo_stack.setClean()
+            return success
         return False
 
     @Slot()
     def _on_add_point_triggered(self):
-        self.controller.sync_points_from_gui(self._get_table_data())
-        self.controller.add_new_point()
+        point_to_add = self.controller.add_current_position_as_point()
+        command = AddPointCommand(self.controller, self, point_to_add if point_to_add else None)
+        self.undo_stack.push(command)
 
     @Slot()
     def _on_delete_points_triggered(self):
         selected_rows = sorted(list({item.row() for item in self.points_table.selectedItems()}))
         if not selected_rows: return
-        reply = QMessageBox.question(self, "Confirmation",
-                                     f"Voulez-vous vraiment supprimer {len(selected_rows)} point(s) ?",
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
-            self.controller.sync_points_from_gui(self._get_table_data())
-            self.controller.delete_selected_points(selected_rows)
+        command = DeletePointsCommand(self.controller, self, selected_rows)
+        self.undo_stack.push(command)
 
     @Slot()
     def _on_move_up_triggered(self):
         selected_rows = {item.row() for item in self.points_table.selectedItems()}
         if len(selected_rows) == 1:
-            self.controller.sync_points_from_gui(self._get_table_data())
-            self.controller.move_selected_point_up(list(selected_rows)[0])
+            index = list(selected_rows)[0]
+            if index > 0:
+                command = MovePointCommand(self.controller, self, index, "haut")
+                self.undo_stack.push(command)
 
     @Slot()
     def _on_move_down_triggered(self):
         selected_rows = {item.row() for item in self.points_table.selectedItems()}
         if len(selected_rows) == 1:
-            self.controller.sync_points_from_gui(self._get_table_data())
-            self.controller.move_selected_point_down(list(selected_rows)[0])
+            index = list(selected_rows)[0]
+            if index < self.points_table.rowCount() - 1:
+                command = MovePointCommand(self.controller, self, index, "bas")
+                self.undo_stack.push(command)
+
+    @Slot(QTableWidgetItem)
+    def _on_cell_changed(self, item):
+        col = item.column()
+        row = item.row()
+        header = self.controller.get_point_headers()[col]
+
+        if header == 'measurement_file': return
+
+        old_value = getattr(self.controller.point_manager.points[row], header)
+        new_value_text = item.text()
+
+        if str(old_value) == new_value_text:
+            return
+
+        command = ChangeCellCommand(self.controller, self, row, col, old_value, new_value_text)
+        self.undo_stack.push(command)
 
     @Slot()
     def _on_save_manual_measure_triggered(self):
@@ -445,11 +484,11 @@ class MainWindow(QMainWindow):
 
     @Slot(list)
     def update_points_table(self, points: list):
-        self.points_table.blockSignals(True)
+        self.points_table.itemChanged.disconnect(self._on_cell_changed)
         self.points_table.setRowCount(0)
         headers = self.controller.get_point_headers()
         if not headers:
-            self.points_table.blockSignals(False)
+            self.points_table.itemChanged.connect(self._on_cell_changed)
             return
         self.points_table.setColumnCount(len(headers))
         self.points_table.setHorizontalHeaderLabels([h.upper().replace("_", " ") for h in headers])
@@ -461,7 +500,7 @@ class MainWindow(QMainWindow):
                 self.points_table.setItemDelegateForColumn(col_index, integer_delegate)
 
         if not points:
-            self.points_table.blockSignals(False)
+            self.points_table.itemChanged.connect(self._on_cell_changed)
             self._update_actions_state()
             return
         self.points_table.setRowCount(len(points))
@@ -475,9 +514,10 @@ class MainWindow(QMainWindow):
                     item = QTableWidgetItem(str(value))
                     item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 self.points_table.setItem(row_index, col_index, item)
-        self.points_table.blockSignals(False)
+
         self.points_table.resizeColumnsToContents()
         self.points_table.horizontalHeader().setStretchLastSection(True)
+        self.points_table.itemChanged.connect(self._on_cell_changed)
         self._update_actions_state()
 
     @Slot(bool)
@@ -486,9 +526,6 @@ class MainWindow(QMainWindow):
         if is_modified:
             title += " *"
         self.setWindowTitle(title)
-        self._update_actions_state()
-
-    def _update_point_actions_state(self):
         self._update_actions_state()
 
     @Slot()

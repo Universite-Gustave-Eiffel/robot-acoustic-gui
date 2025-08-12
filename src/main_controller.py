@@ -166,47 +166,26 @@ class MainController(QObject):
             return True
         return False
 
-    @Slot()
-    def add_new_point(self):
-        self.point_manager.add_point()
-        self._notify_point_list_changed()
+    # Les méthodes suivantes sont maintenant principalement utilisées par les QUndoCommand
+    # et non plus directement par la GUI.
 
-    @Slot()
-    def add_current_position_as_point(self):
-        if not self.robot: return
+    def add_current_position_as_point(self) -> Point:
+        if not self.robot: return None
         with self.robot_lock:
-            current_pos = self.robot.last_positions
-            if not any(current_pos.values()):
-                current_pos = self.robot.update_positions()
+            current_pos = self.robot.update_positions()
             if not current_pos:
                 self.log_message_sent.emit("Position actuelle du robot inconnue.")
-                return
+                return None
             capsule_pos = self.robot.capsule_pos
             new_point = Point(
                 x=round(capsule_pos.get('X', 0.0)),
                 y=round(capsule_pos.get('Y', 0.0)),
                 z=round(capsule_pos.get('Z', 0.0)),
-                theta=round(current_pos.get('THETA', 0.0)),  # Les angles sont les mêmes
-                phi=round(current_pos.get('PHI', 0.0)),  # Les angles sont les mêmes
+                theta=round(current_pos.get('THETA', 0.0)),
+                phi=round(current_pos.get('PHI', 0.0)),
             )
-        self.point_manager.add_point(new_point)
-        self._notify_point_list_changed()
-        self.log_message_sent.emit("Position actuelle ajoutée à la liste de points.")
-
-    @Slot(list)
-    def delete_selected_points(self, indices: list[int]):
-        self.point_manager.delete_points(indices)
-        self._notify_point_list_changed()
-
-    @Slot(int)
-    def move_selected_point_up(self, index: int):
-        self.point_manager.move_point_up(index)
-        self._notify_point_list_changed()
-
-    @Slot(int)
-    def move_selected_point_down(self, index: int):
-        self.point_manager.move_point_down(index)
-        self._notify_point_list_changed()
+        self.log_message_sent.emit("Position capsule actuelle récupérée.")
+        return new_point
 
     def validate_filenames(self) -> list[int]:
         missing_indices = []
@@ -372,7 +351,7 @@ class MainController(QObject):
             if self.pulse.is_measurement_active: self.log_message_sent.emit(
                 "Une mesure manuelle est déjà en cours."); return
             if not self.pulse.is_template_ready_for_measurement and not self.pulse.autorange():
-                self.log_message_sent.emit("Échec de l'autorange.")
+                self.log_message_sent.emit("Échec de l'autorange.");
                 return
             self.pulse.start_measurement()
             self.log_message_sent.emit("Mesure manuelle démarrée.")
@@ -406,6 +385,23 @@ class MainController(QObject):
             self.robot.move_to(**robot_coords)
         self.log_message_sent.emit("Déplacement capsule terminé.")
         self.robot_move_completed.emit(self.robot.last_positions)
+
+    @Slot(dict)
+    def move_to_point_data(self, point_data: dict):
+        if not self.robot:
+            self.log_message_sent.emit("ERREUR: Le robot n'est pas connecté.")
+            return
+        if self.sequence_thread and self.sequence_thread.isRunning():
+            self.log_message_sent.emit("Veuillez arrêter la séquence avant de lancer un mouvement manuel.")
+            return
+        capsule_coords = {
+            'X': float(point_data.get('x', 0.0)),
+            'Y': float(point_data.get('y', 0.0)),
+            'Z': float(point_data.get('z', 0.0)),
+            'THETA': float(point_data.get('theta', 0.0)),
+            'PHI': float(point_data.get('phi', 0.0))
+        }
+        self.move_capsule_absolute(capsule_coords)
 
     @Slot(dict)
     def define_robot_position(self, capsule_coords: dict):
@@ -492,26 +488,3 @@ class MainController(QObject):
         except Exception as e:
             self.logger.error(f"Erreur lors de la sauvegarde des configurations : {e}", exc_info=True)
             self.log_message_sent.emit(f"ERREUR: Impossible de sauvegarder les configurations: {e}")
-
-    @Slot(dict)
-    def move_to_point_data(self, point_data: dict):
-        """Démarre un mouvement vers les coordonnées capsule d'un point donné."""
-        if not self.robot:
-            self.log_message_sent.emit("ERREUR: Le robot n'est pas connecté.")
-            return
-
-        # On s'assure qu'il n'y a pas de séquence en cours
-        if self.sequence_thread and self.sequence_thread.isRunning():
-            self.log_message_sent.emit("Veuillez arrêter la séquence avant de lancer un mouvement manuel.")
-            return
-
-        # On extrait les coordonnées pertinentes du dictionnaire du point
-        capsule_coords = {
-            'X': float(point_data.get('x', 0.0)),
-            'Y': float(point_data.get('y', 0.0)),
-            'Z': float(point_data.get('z', 0.0)),
-            'THETA': float(point_data.get('theta', 0.0)),
-            'PHI': float(point_data.get('phi', 0.0))
-        }
-
-        self.move_capsule_absolute(capsule_coords)
