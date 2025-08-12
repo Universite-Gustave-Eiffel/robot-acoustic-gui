@@ -90,6 +90,10 @@ class MainWindow(QMainWindow):
                          slot=self._open_telecommande)
         self._add_action('goto_parking', 'goto_parking.png', 'Aller au parking', "Aller au parking",
                          slot=self.controller.move_robot_to_parking)
+        self._add_action('goto_selected', 'goto_point.png', 'Aller au point sélectionné',"Déplace le robot vers le point sélectionné dans la liste",
+                         slot=self._on_goto_selected_point_triggered)
+        self._add_action('goto_zero', 'goto_zero.png', 'Aller au Zéro',"Déplace le robot aux coordonnées capsule 0,0,0,0,0",
+                         slot=self._on_goto_zero_triggered)
         self._add_action('add_point', 'add.png', "Ajouter point", "Ajouter un nouveau point à la fin",
                          slot=self._on_add_point_triggered)
         self._add_action('delete_point', 'minus.png', "Supprimer point(s)", "Supprimer le(s) point(s) sélectionné(s)",
@@ -152,10 +156,7 @@ class MainWindow(QMainWindow):
         toolbar_manual.addWidget(self.manual_filename_edit)
         toolbar_manual.addAction(self._actions['save_manual_measure'])
         self.addToolBarBreak()
-        toolbar_robot = QToolBar("Outils Robot")
-        self.addToolBar(toolbar_robot)
-        toolbar_robot.addWidget(QLabel("Robot : "))
-        toolbar_robot.addAction(self._actions['goto_parking'])
+
         toolbar_edition = QToolBar("Édition Liste")
         toolbar_edition.setOrientation(Qt.Orientation.Vertical)
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, toolbar_edition)
@@ -164,6 +165,13 @@ class MainWindow(QMainWindow):
         toolbar_edition.addSeparator()
         toolbar_edition.addAction(self._actions['move_point_up'])
         toolbar_edition.addAction(self._actions['move_point_down'])
+
+        toolbar_robot = QToolBar("Outils Robot")
+        self.addToolBar(toolbar_robot)
+        toolbar_robot.addWidget(QLabel("Robot : "))
+        toolbar_robot.addAction(self._actions['goto_parking'])
+        toolbar_robot.addAction(self._actions['goto_zero'])  # Ligne ajoutée
+        toolbar_robot.addAction(self._actions['goto_selected'])  # Ligne ajoutée
 
     def _create_central_widget(self) -> None:
         central_widget = QWidget(self)
@@ -233,6 +241,33 @@ class MainWindow(QMainWindow):
     def _on_next_point_triggered(self):
         self._start_sequence_common(self.controller.start_single_point_sequence)
 
+    @Slot()
+    def _on_goto_selected_point_triggered(self):
+        """Appelé lorsque l'utilisateur clique sur 'Aller au point sélectionné'."""
+        selected_rows = {item.row() for item in self.points_table.selectedItems()}
+        if len(selected_rows) != 1:
+            self.update_status_bar("Veuillez sélectionner une seule ligne de destination.")
+            return
+
+        selected_row = list(selected_rows)[0]
+
+        # On récupère les données de la ligne directement depuis la table
+        point_data = {}
+        for col in range(self.points_table.columnCount()):
+            header = self.points_table.horizontalHeaderItem(col).text().lower().replace(" ", "_")
+            item = self.points_table.item(selected_row, col)
+            point_data[header] = item.text() if item else "0.0"
+
+        self.update_status_bar(f"Déplacement vers le point {selected_row + 1}...")
+        self.controller.move_to_point_data(point_data)
+
+    @Slot()
+    def _on_goto_zero_triggered(self):
+        """Appelé lorsque l'utilisateur clique sur 'Aller au Zéro'."""
+        zero_coords = {'X': 0.0, 'Y': 0.0, 'Z': 0.0, 'THETA': 0.0, 'PHI': 0.0}
+        self.update_status_bar("Déplacement vers le Zéro Capsule...")
+        self.controller.move_capsule_absolute(zero_coords)
+
     @Slot(str)
     def _handle_sequence_state(self, status: str):
         self.update_status_bar(status)
@@ -253,24 +288,29 @@ class MainWindow(QMainWindow):
         selected_items = self.points_table.selectedItems()
         selected_rows = {item.row() for item in selected_items}
         has_selection = len(selected_rows) > 0
+        single_selection = len(selected_rows) == 1
 
         # Séquence
         self._actions['start_sequence'].setEnabled(not running and has_points)
         self._actions['next_point'].setEnabled(not running and has_selection)
         self._actions['pause_sequence'].setEnabled(running)
-        self._actions['stop_sequence'].setEnabled(running)
 
         # Édition de liste
         self._actions['add_point'].setEnabled(not running)
         self._actions['delete_point'].setEnabled(not running and has_selection)
-        self._actions['move_point_up'].setEnabled(not running and has_selection and list(selected_rows)[0] > 0)
+        self._actions['move_point_up'].setEnabled(not running and single_selection and list(selected_rows)[0] > 0)
         self._actions['move_point_down'].setEnabled(
-            not running and has_selection and list(selected_rows)[0] < self.points_table.rowCount() - 1)
+            not running and single_selection and list(selected_rows)[0] < self.points_table.rowCount() - 1)
 
         # Fichier
         self._actions['ouvrir'].setEnabled(not running)
         self._actions['enregistrer'].setEnabled(not running and self.controller.is_modified)
         self._actions['enregistrer_sous'].setEnabled(not running)
+
+        # Mouvements manuels
+        self._actions['goto_parking'].setEnabled(not running)
+        self._actions['goto_zero'].setEnabled(not running)
+        self._actions['goto_selected'].setEnabled(not running and single_selection)
 
         self.points_table.setEditTriggers(
             QAbstractItemView.NoEditTriggers if running else QAbstractItemView.DoubleClicked

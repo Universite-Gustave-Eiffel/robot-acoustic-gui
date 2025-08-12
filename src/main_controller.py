@@ -491,3 +491,26 @@ class MainController(QObject):
         except Exception as e:
             self.logger.error(f"Erreur lors de la sauvegarde des configurations : {e}", exc_info=True)
             self.log_message_sent.emit(f"ERREUR: Impossible de sauvegarder les configurations: {e}")
+
+    @Slot(dict)
+    def move_to_point_data(self, point_data: dict):
+        """Démarre un mouvement vers les coordonnées capsule d'un point donné."""
+        if not self.robot:
+            self.log_message_sent.emit("ERREUR: Le robot n'est pas connecté.")
+            return
+
+        # On s'assure qu'il n'y a pas de séquence en cours
+        if self.sequence_thread and self.sequence_thread.isRunning():
+            self.log_message_sent.emit("Veuillez arrêter la séquence avant de lancer un mouvement manuel.")
+            return
+
+        # On extrait les coordonnées pertinentes du dictionnaire du point
+        capsule_coords = {
+            'X': float(point_data.get('x', 0.0)),
+            'Y': float(point_data.get('y', 0.0)),
+            'Z': float(point_data.get('z', 0.0)),
+            'THETA': float(point_data.get('theta', 0.0)),
+            'PHI': float(point_data.get('phi', 0.0))
+        }
+
+        self.move_capsule_absolute(capsule_coords)
