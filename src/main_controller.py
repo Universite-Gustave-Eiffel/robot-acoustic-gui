@@ -181,12 +181,13 @@ class MainController(QObject):
             if not current_pos:
                 self.log_message_sent.emit("Position actuelle du robot inconnue.")
                 return
+            capsule_pos = self.robot.capsule_pos
             new_point = Point(
-                x=round(current_pos.get('X', 0.0)),
-                y=round(current_pos.get('Y', 0.0)),
-                z=round(current_pos.get('Z', 0.0)),
-                theta=round(current_pos.get('THETA', 0.0)),
-                phi=round(current_pos.get('PHI', 0.0)),
+                x=round(capsule_pos.get('X', 0.0)),
+                y=round(capsule_pos.get('Y', 0.0)),
+                z=round(capsule_pos.get('Z', 0.0)),
+                theta=round(current_pos.get('THETA', 0.0)),  # Les angles sont les mêmes
+                phi=round(current_pos.get('PHI', 0.0)),  # Les angles sont les mêmes
             )
         self.point_manager.add_point(new_point)
         self._notify_point_list_changed()
