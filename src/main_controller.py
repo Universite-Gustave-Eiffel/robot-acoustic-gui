@@ -25,7 +25,10 @@ def get_config(interface_name: str):
 
 class MainController(QObject):
     log_message_sent = Signal(str)
-    robot_position_updated = Signal(dict)
+    # --- MODIFICATION DU SIGNAL ---
+    # Émet les coordonnées robot ET les coordonnées capsule
+    robot_position_updated = Signal(dict, dict)
+    # ---------------------------
     robot_move_completed = Signal(dict)
     point_list_changed = Signal(list)
     document_modified_status_changed = Signal(bool)
@@ -108,9 +111,11 @@ class MainController(QObject):
         if self.robot and self.robot.driver.is_connected:
             if self.robot_lock.acquire(blocking=False):
                 try:
-                    positions = self.robot.update_positions()
-                    if positions:
-                        self.robot_position_updated.emit(positions)
+                    robot_pos = self.robot.update_positions()
+                    if robot_pos:
+                        capsule_pos = self.robot.capsule_pos
+                        # --- MODIFICATION DE L'ÉMISSION DU SIGNAL ---
+                        self.robot_position_updated.emit(robot_pos, capsule_pos)
                 finally:
                     self.robot_lock.release()
 
@@ -165,9 +170,6 @@ class MainController(QObject):
             self.set_document_modified(False)
             return True
         return False
-
-    # Les méthodes suivantes sont maintenant principalement utilisées par les QUndoCommand
-    # et non plus directement par la GUI.
 
     def add_current_position_as_point(self) -> Point:
         if not self.robot: return None

@@ -51,6 +51,8 @@ class MainWindow(QMainWindow):
 
         self.undo_stack = QUndoStack(self)
 
+        self.status_bar_labels = {}
+
         self._setup_ui()
 
     def setup_controller_and_signals(self, splash: QSplashScreen):
@@ -71,6 +73,7 @@ class MainWindow(QMainWindow):
         self.controller.sequence_status_changed.connect(self._handle_sequence_state)
         self.controller.highlight_point_in_gui.connect(self.highlight_table_row)
         self.controller.sequence_finished_with_next_point.connect(self.on_single_point_sequence_finished)
+        self.controller.robot_position_updated.connect(self.update_coordinate_display)
 
         self.undo_stack.canUndoChanged.connect(self._actions['undo'].setEnabled)
         self.undo_stack.canRedoChanged.connect(self._actions['redo'].setEnabled)
@@ -100,7 +103,6 @@ class MainWindow(QMainWindow):
         return action
 
     def _create_actions_and_connections(self) -> None:
-        # Fichier
         self._add_action('quitter', 'exit.png', '&Quitter', "Quitter l'application", 'Ctrl+Q', self.close)
         self._add_action('config', 'settings.png', 'Configuration...', "Configurer l'application",
                          slot=self._open_config_window)
@@ -111,19 +113,12 @@ class MainWindow(QMainWindow):
         self._add_action('enregistrer_sous', 'save_as.png', 'Enregistrer &sous...', "Enregistrer sous un nouveau nom",
                          slot=self._on_save_as_triggered)
 
-        # Édition
         self._add_action('undo', 'undo.png', 'Annuler', "Annuler la dernière action", 'Ctrl+Z', self.undo_stack.undo)
         self._add_action('redo', 'redo.png', 'Rétablir', "Rétablir la dernière action annulée", 'Ctrl+Y',
                          self.undo_stack.redo)
-
-        # --- CORRECTION ---
-        # On désactive les boutons manuellement à la création.
-        # Ils seront automatiquement réactivés par le QUndoStack dès qu'une action sera ajoutée.
         self._actions['undo'].setEnabled(False)
         self._actions['redo'].setEnabled(False)
-        # --------------------
 
-        # Outils & Robot
         self._add_action('telecommande', 'joystick.png', 'Télécommande', "Ouvrir la télécommande",
                          slot=self._open_telecommande)
         self._add_action('goto_parking', 'goto_parking.png', 'Aller au parking', "Aller au parking",
@@ -134,7 +129,6 @@ class MainWindow(QMainWindow):
         self._add_action('goto_zero', 'goto_zero.png', 'Aller au Zéro',
                          "Déplace le robot aux coordonnées capsule 0,0,0,0,0", slot=self._on_goto_zero_triggered)
 
-        # Édition de liste
         self._add_action('add_point', 'add.png', "Ajouter point", "Ajouter un nouveau point à la fin",
                          slot=self._on_add_point_triggered)
         self._add_action('delete_point', 'minus.png', "Supprimer point(s)", "Supprimer le(s) point(s) sélectionné(s)",
@@ -144,7 +138,6 @@ class MainWindow(QMainWindow):
         self._add_action('move_point_down', 'arrow_down.png', "Descendre", "Déplacer vers le bas",
                          slot=self._on_move_down_triggered)
 
-        # Séquence
         self._add_action('start_sequence', 'play.png', 'Démarrer Séquence',
                          "Démarrer la séquence à partir du point sélectionné",
                          slot=self._on_start_full_sequence_triggered)
@@ -153,7 +146,6 @@ class MainWindow(QMainWindow):
         self._add_action('pause_sequence', 'pause.png', 'Arrêter la séquence',
                          "Arrête la séquence après l'étape en cours", slot=self.controller.stop_sequence)
 
-        # Mesure manuelle
         self._add_action('start_manual_measure', 'start_measurement.png', 'Démarrer mesure manuelle',
                          "Démarrer une mesure PULSE unique", slot=self.controller.start_manual_measurement)
         self._add_action('save_manual_measure', 'save_measurement.png', 'Sauvegarder mesure manuelle',
@@ -232,7 +224,22 @@ class MainWindow(QMainWindow):
         self.points_table.itemChanged.connect(self._on_cell_changed)
 
     def _create_statusbar(self) -> None:
-        self.statusBar().showMessage('Prêt')
+        status_bar = self.statusBar()
+        self.status_message_label = QLabel("Prêt")
+        status_bar.addWidget(self.status_message_label, 1)  # Le '1' donne l'espace extensible
+
+        coord_widget = QWidget()
+        coord_layout = QHBoxLayout(coord_widget)
+        coord_layout.setContentsMargins(10, 0, 10, 0)
+
+        axes = ['X', 'Y', 'Z', 'Theta', 'Phi']
+        for axis in axes:
+            label = QLabel(f"{axis}: N/C")
+            label.setMinimumWidth(80)
+            coord_layout.addWidget(label)
+            self.status_bar_labels[axis] = label
+
+        status_bar.addPermanentWidget(coord_widget)
 
     def _get_table_data(self) -> list[dict]:
         data = []
@@ -546,8 +553,16 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def update_status_bar(self, message: str):
-        print(f"[GUI Log] {message}")
-        self.statusBar().showMessage(message, 5000)
+        self.status_message_label.setText(message)
+
+    @Slot(dict, dict)
+    def update_coordinate_display(self, robot_pos: dict, capsule_pos: dict):
+        self.status_bar_labels['X'].setText(f"X: {round(capsule_pos.get('X', 0.0))}")
+        self.status_bar_labels['Y'].setText(f"Y: {round(capsule_pos.get('Y', 0.0))}")
+        self.status_bar_labels['Z'].setText(f"Z: {round(capsule_pos.get('Z', 0.0))}")
+        # On utilise robot_pos pour les angles, car ils sont identiques
+        self.status_bar_labels['Theta'].setText(f"θ: {round(robot_pos.get('THETA', 0.0))}")
+        self.status_bar_labels['Phi'].setText(f"φ: {round(robot_pos.get('PHI', 0.0))}")
 
 
 if __name__ == '__main__':

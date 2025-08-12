@@ -33,7 +33,6 @@ class TelecommandeWindow(QMainWindow):
         self.keyboard_control_active = False
         self.active_jogs = {}
 
-        # Mappage des touches (ZQSD pour AZERTY)
         self.key_mapping = {
             Qt.Key_Up: ('Y', 1),
             Qt.Key_Down: ('Y', -1),
@@ -52,7 +51,10 @@ class TelecommandeWindow(QMainWindow):
         self.controller.robot_position_updated.connect(self.update_position_display)
         self.controller.robot_move_completed.connect(self.update_target_fields_after_event)
 
-        self._on_use_current_pos()
+        # Initialiser les champs avec la position actuelle si disponible
+        if self.controller.robot and self.controller.robot.last_positions:
+            self.update_position_display(self.controller.robot.last_positions, self.controller.robot.capsule_pos)
+            self._on_use_current_pos()
 
     def _create_ui(self):
         self._create_actions_and_toolbar()
@@ -77,7 +79,8 @@ class TelecommandeWindow(QMainWindow):
         stop_action.triggered.connect(self.controller.emergency_stop)
         toolbar.addAction(stop_action)
         toolbar.addSeparator()
-        set_zero_action = QAction(QIcon(ResourceManager.get_icon_path('set_zero.png')), "Définir Zéro Actuel", self)
+        set_zero_action = QAction(QIcon(ResourceManager.get_icon_path('set_zero.png')), "Définir Zéro Capsule Actuel",
+                                  self)
         set_zero_action.triggered.connect(self.controller.set_robot_zero_position)
         toolbar.addAction(set_zero_action)
         set_parking_action = QAction(QIcon(ResourceManager.get_icon_path('parking.png')), "Définir Parking Actuel",
@@ -232,14 +235,20 @@ class TelecommandeWindow(QMainWindow):
                 self.controller.log_message_sent.emit("Contrôleur réinitialisé et prêt.")
             self.active_jogs.clear()
 
-    @Slot(dict)
-    def update_position_display(self, positions: dict):
-        for axis, widget in self.robot_pos_widgets.items():
-            widget.setText(f"{round(positions.get(axis.upper(), 0.0))}")
-        if self.controller.robot:
-            self.controller.robot._calculate_capsule_position()
-            for axis, widget in self.capsule_pos_widgets.items():
-                widget.setText(f"{round(self.controller.robot.capsule_pos.get(axis.upper(), 0.0))}")
+    @Slot(dict, dict)
+    def update_position_display(self, robot_pos: dict, capsule_pos: dict):
+        axes = ['X', 'Y', 'Z', 'THETA', 'PHI']
+        for axis in axes:
+            # Affichage des coordonnées robot (toujours depuis robot_pos)
+            self.robot_pos_widgets[axis].setText(f"{round(robot_pos.get(axis.upper(), 0.0))}")
+
+            # Affichage des coordonnées capsule
+            if axis in ['X', 'Y', 'Z']:
+                # Pour X, Y, Z, on prend la valeur calculée dans capsule_pos
+                self.capsule_pos_widgets[axis].setText(f"{round(capsule_pos.get(axis.upper(), 0.0))}")
+            else:  # Pour THETA et PHI
+                # Pour les angles, la coordonnée capsule est la même que la coordonnée robot
+                self.capsule_pos_widgets[axis].setText(f"{round(robot_pos.get(axis.upper(), 0.0))}")
 
     @Slot(dict)
     def update_target_fields_after_event(self, last_robot_position: dict):
@@ -324,19 +333,13 @@ class TelecommandeWindow(QMainWindow):
             super().keyReleaseEvent(event)
 
     def closeEvent(self, event: QCloseEvent):
-        """
-        Surchargé pour s'assurer de sortir proprement du mode JOG
-        et de réinitialiser le contrôleur si nécessaire.
-        """
         if self.keyboard_control_active and self.controller.robot:
             self.controller.log_message_sent.emit("Fermeture de la télécommande: réinitialisation du contrôleur...")
             try:
-                # On applique la même solution robuste
                 self.controller.robot.software_reset()
                 self.controller.log_message_sent.emit("Contrôleur réinitialisé et prêt.")
-                self.keyboard_control_active = False  # On met à jour l'état interne
+                self.keyboard_control_active = False
             except Exception as e:
                 self.controller.log_message_sent.emit(f"Erreur lors du reset à la fermeture: {e}")
 
-        # Accepte l'événement de fermeture pour que la fenêtre se ferme
         event.accept()
