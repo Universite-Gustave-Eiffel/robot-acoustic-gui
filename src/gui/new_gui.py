@@ -13,15 +13,39 @@ from PySide6.QtWidgets import (
     QStatusBar, QMessageBox, QLineEdit, QMenu, QGridLayout, QFrame,
     QSizePolicy, QFormLayout, QSpinBox, QHBoxLayout, QTableWidget,
     QHeaderView, QTableWidgetItem, QPushButton, QFileDialog, QSplashScreen,
-    QAbstractItemView
+    QAbstractItemView, QStyledItemDelegate
 )
-from PySide6.QtGui import QIcon, QFont, QAction, QCloseEvent, QColor, QPixmap
+from PySide6.QtGui import QIcon, QFont, QAction, QCloseEvent, QColor, QPixmap, QIntValidator
 from PySide6.QtCore import Qt, QSize, Slot, QCoreApplication
 
 from src.main_controller import MainController
 from src.gui.config_window import ConfigWindow
 from src.gui.telecommande_window import TelecommandeWindow
 from src.gui.resource_manager import ResourceManager
+
+
+# --- CLASSE AJOUTÉE ICI ---
+class IntegerDelegate(QStyledItemDelegate):
+    """
+    Un delegate pour s'assurer que seules des valeurs numériques (entiers)
+    peuvent être entrées dans les colonnes spécifiées d'un QTableWidget.
+    """
+
+    def createEditor(self, parent, option, index):
+        editor = QLineEdit(parent)
+        validator = QIntValidator(parent)
+        editor.setValidator(validator)
+        return editor
+
+    def setEditorData(self, editor, index):
+        value = index.model().data(index, 0)
+        editor.setText(str(value))
+
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.text())
+
+
+# -------------------------
 
 
 class MainWindow(QMainWindow):
@@ -90,9 +114,11 @@ class MainWindow(QMainWindow):
                          slot=self._open_telecommande)
         self._add_action('goto_parking', 'goto_parking.png', 'Aller au parking', "Aller au parking",
                          slot=self.controller.move_robot_to_parking)
-        self._add_action('goto_selected', 'goto_point.png', 'Aller au point sélectionné',"Déplace le robot vers le point sélectionné dans la liste",
+        self._add_action('goto_selected', 'goto_point.png', 'Aller au point sélectionné',
+                         "Déplace le robot vers le point sélectionné dans la liste",
                          slot=self._on_goto_selected_point_triggered)
-        self._add_action('goto_zero', 'goto_zero.png', 'Aller au Zéro',"Déplace le robot aux coordonnées capsule 0,0,0,0,0",
+        self._add_action('goto_zero', 'goto_zero.png', 'Aller au Zéro',
+                         "Déplace le robot aux coordonnées capsule 0,0,0,0,0",
                          slot=self._on_goto_zero_triggered)
         self._add_action('add_point', 'add.png', "Ajouter point", "Ajouter un nouveau point à la fin",
                          slot=self._on_add_point_triggered)
@@ -170,8 +196,8 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar_robot)
         toolbar_robot.addWidget(QLabel("Robot : "))
         toolbar_robot.addAction(self._actions['goto_parking'])
-        toolbar_robot.addAction(self._actions['goto_zero'])  # Ligne ajoutée
-        toolbar_robot.addAction(self._actions['goto_selected'])  # Ligne ajoutée
+        toolbar_robot.addAction(self._actions['goto_zero'])
+        toolbar_robot.addAction(self._actions['goto_selected'])
 
     def _create_central_widget(self) -> None:
         central_widget = QWidget(self)
@@ -243,7 +269,6 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_goto_selected_point_triggered(self):
-        """Appelé lorsque l'utilisateur clique sur 'Aller au point sélectionné'."""
         selected_rows = {item.row() for item in self.points_table.selectedItems()}
         if len(selected_rows) != 1:
             self.update_status_bar("Veuillez sélectionner une seule ligne de destination.")
@@ -251,7 +276,6 @@ class MainWindow(QMainWindow):
 
         selected_row = list(selected_rows)[0]
 
-        # On récupère les données de la ligne directement depuis la table
         point_data = {}
         for col in range(self.points_table.columnCount()):
             header = self.points_table.horizontalHeaderItem(col).text().lower().replace(" ", "_")
@@ -263,7 +287,6 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_goto_zero_triggered(self):
-        """Appelé lorsque l'utilisateur clique sur 'Aller au Zéro'."""
         zero_coords = {'X': 0.0, 'Y': 0.0, 'Z': 0.0, 'THETA': 0.0, 'PHI': 0.0}
         self.update_status_bar("Déplacement vers le Zéro Capsule...")
         self.controller.move_capsule_absolute(zero_coords)
@@ -290,24 +313,21 @@ class MainWindow(QMainWindow):
         has_selection = len(selected_rows) > 0
         single_selection = len(selected_rows) == 1
 
-        # Séquence
         self._actions['start_sequence'].setEnabled(not running and has_points)
-        self._actions['next_point'].setEnabled(not running and has_selection)
+        self._actions['next_point'].setEnabled(not running and single_selection)
         self._actions['pause_sequence'].setEnabled(running)
+        self._actions['stop_sequence'].setEnabled(running)
 
-        # Édition de liste
         self._actions['add_point'].setEnabled(not running)
         self._actions['delete_point'].setEnabled(not running and has_selection)
         self._actions['move_point_up'].setEnabled(not running and single_selection and list(selected_rows)[0] > 0)
         self._actions['move_point_down'].setEnabled(
             not running and single_selection and list(selected_rows)[0] < self.points_table.rowCount() - 1)
 
-        # Fichier
         self._actions['ouvrir'].setEnabled(not running)
         self._actions['enregistrer'].setEnabled(not running and self.controller.is_modified)
         self._actions['enregistrer_sous'].setEnabled(not running)
 
-        # Mouvements manuels
         self._actions['goto_parking'].setEnabled(not running)
         self._actions['goto_zero'].setEnabled(not running)
         self._actions['goto_selected'].setEnabled(not running and single_selection)
@@ -433,6 +453,13 @@ class MainWindow(QMainWindow):
             return
         self.points_table.setColumnCount(len(headers))
         self.points_table.setHorizontalHeaderLabels([h.upper().replace("_", " ") for h in headers])
+
+        integer_delegate = IntegerDelegate(self)
+        numeric_columns = ['x', 'y', 'z', 'theta', 'phi', 'num_measurements']
+        for col_index, header in enumerate(headers):
+            if header in numeric_columns:
+                self.points_table.setItemDelegateForColumn(col_index, integer_delegate)
+
         if not points:
             self.points_table.blockSignals(False)
             self._update_actions_state()
@@ -442,7 +469,7 @@ class MainWindow(QMainWindow):
             for col_index, header in enumerate(headers):
                 value = point_data.get(header, "")
                 if isinstance(value, (float, int)):
-                    item = QTableWidgetItem(f"{value}")
+                    item = QTableWidgetItem(f"{round(value)}")
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 else:
                     item = QTableWidgetItem(str(value))
@@ -459,6 +486,9 @@ class MainWindow(QMainWindow):
         if is_modified:
             title += " *"
         self.setWindowTitle(title)
+        self._update_actions_state()
+
+    def _update_point_actions_state(self):
         self._update_actions_state()
 
     @Slot()
