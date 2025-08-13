@@ -146,6 +146,8 @@ class MainWindow(QMainWindow):
         self._add_action('pause_sequence', 'pause.png', 'Arrêter la séquence',
                          "Arrête la séquence après l'étape en cours", slot=self.controller.stop_sequence)
 
+        self._add_action('toggle_pulse', 'pulse.png', 'Afficher/Cacher PULSE',
+                         "Affiche ou cache la fenêtre de PULSE LabShop",slot=self.controller.toggle_pulse_visibility)
         self._add_action('start_manual_measure', 'start_measurement.png', 'Démarrer mesure manuelle',
                          "Démarrer une mesure PULSE unique", slot=self.controller.start_manual_measurement)
         self._add_action('save_manual_measure', 'save_measurement.png', 'Sauvegarder mesure manuelle',
@@ -187,6 +189,8 @@ class MainWindow(QMainWindow):
 
         toolbar_manual = QToolBar("Mesure Manuelle")
         self.addToolBar(toolbar_manual)
+        toolbar_manual.addAction(self._actions['toggle_pulse'])
+        toolbar_manual.addSeparator()
         toolbar_manual.addAction(self._actions['start_manual_measure'])
         self.manual_filename_edit = QLineEdit("mesure_manuelle.txt")
         self.manual_filename_edit.setToolTip("Nom du fichier pour la prochaine mesure manuelle")

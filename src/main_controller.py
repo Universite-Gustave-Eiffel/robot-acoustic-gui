@@ -490,3 +490,21 @@ class MainController(QObject):
         except Exception as e:
             self.logger.error(f"Erreur lors de la sauvegarde des configurations : {e}", exc_info=True)
             self.log_message_sent.emit(f"ERREUR: Impossible de sauvegarder les configurations: {e}")
+
+    @Slot()
+    def toggle_pulse_visibility(self):
+        """Affiche ou cache la fenêtre de l'application PULSE LabShop."""
+        if not self.pulse or not self.pulse.pulse_app:
+            self.log_message_sent.emit("ERREUR: L'interface PULSE n'est pas connectée.")
+            return
+
+        try:
+            # On inverse l'état de visibilité actuel
+            is_visible = self.pulse.pulse_app.Visible
+            self.pulse.pulse_app.Visible = not is_visible
+
+            new_state = "affichée" if not is_visible else "cachée"
+            self.log_message_sent.emit(f"Fenêtre PULSE LabShop {new_state}.")
+        except Exception as e:
+            self.logger.error(f"Erreur lors du changement de visibilité de PULSE : {e}")
+            self.log_message_sent.emit("ERREUR: Impossible de contrôler la fenêtre PULSE.")

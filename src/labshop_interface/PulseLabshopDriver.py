@@ -203,8 +203,7 @@ class PulseLabshopDriver:
                 self.pulse_app = None
                 return False
 
-            self.pulse_app.Visible = True
-            logger.info(f"Projet '{self.project.Name}' ouvert et Pulse visible.")
+            logger.info(f"Projet '{self.project.Name}' ouvert")
             time.sleep(1)
 
             if not (self.event_thread and self.event_thread.is_alive()):
