@@ -4,6 +4,7 @@
 import sys
 import logging
 import time
+import logging.handlers
 import os
 from pathlib import Path
 from typing import Optional, Dict
@@ -23,6 +24,50 @@ from src.gui.config_window import ConfigWindow
 from src.gui.telecommande_window import TelecommandeWindow
 from src.gui.resource_manager import ResourceManager
 from src.gui.commands import AddPointCommand, DeletePointsCommand, MovePointCommand, ChangeCellCommand
+from src.gui.log_viewer_window import LogViewerWindow
+
+LOG_DIR = Path("logs")
+LOG_DIR.mkdir(exist_ok=True)
+ROBOT_LOG_FILE = LOG_DIR / "robot_app.log"
+PULSE_LOG_FILE = LOG_DIR / "pulse_driver.log"
+
+
+def setup_logging():
+    """Configure les loggers pour l'application avec des fichiers distincts."""
+    log_formatter = logging.Formatter('%(asctime)s - %(name)-25s - %(levelname)-8s - (%(threadName)s) %(message)s')
+
+    # Logger Racine (pour la console)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)  # Capturer tous les niveaux
+
+    # Vider les handlers existants pour éviter les doublons
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(log_formatter)
+    console_handler.setLevel(logging.INFO)  # N'afficher que INFO et plus dans la console
+    root_logger.addHandler(console_handler)
+
+    # Handler pour les logs Robot
+    robot_handler = logging.handlers.RotatingFileHandler(ROBOT_LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=2,
+                                                         encoding='utf-8')
+    robot_handler.setFormatter(log_formatter)
+    robot_handler.setLevel(logging.DEBUG)
+    logging.getLogger("RobotApp").addHandler(robot_handler)
+
+    # Handler pour les logs PULSE
+    pulse_handler = logging.handlers.RotatingFileHandler(PULSE_LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=2,
+                                                         encoding='utf-8')
+    pulse_handler.setFormatter(log_formatter)
+    pulse_handler.setLevel(logging.DEBUG)
+    # On attache ce handler spécifiquement au logger du driver Pulse
+    logging.getLogger("RobotApp.PulseDriver").addHandler(pulse_handler)
+
+    # Empêcher les logs Pulse de remonter au logger "RobotApp" pour ne pas les écrire dans les deux fichiers
+    logging.getLogger("RobotApp.PulseDriver").propagate = False
+
+    logging.info("Système de logging initialisé.")
 
 
 class IntegerDelegate(QStyledItemDelegate):
@@ -45,6 +90,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.controller = MainController()
         self.telecommande_window: Optional[TelecommandeWindow] = None
+        self.robot_log_window: Optional[LogViewerWindow] = None
+        self.pulse_log_window: Optional[LogViewerWindow] = None
+        self._actions: Dict[str, QAction] = {}
         self._actions: Dict[str, QAction] = {}
         self.current_highlighted_row = -1
         self._is_sequence_running = False
@@ -152,6 +200,10 @@ class MainWindow(QMainWindow):
                          "Démarrer une mesure PULSE unique", slot=self.controller.start_manual_measurement)
         self._add_action('save_manual_measure', 'save_measurement.png', 'Sauvegarder mesure manuelle',
                          "Sauvegarder la dernière mesure manuelle", slot=self._on_save_manual_measure_triggered)
+        self._add_action('show_robot_log', 'log_robot.png', 'Afficher Logs Robot',
+                         "Ouvre la fenêtre des logs du robot et du contrôleur", slot=self._open_robot_log_viewer)
+        self._add_action('show_pulse_log', 'log_pulse.png', 'Afficher Logs PULSE',
+                         "Ouvre la fenêtre des logs de l'interface PULSE", slot=self._open_pulse_log_viewer)
 
     def _create_menus(self) -> None:
         menu_bar = self.menuBar()
@@ -197,12 +249,20 @@ class MainWindow(QMainWindow):
         toolbar_manual.addWidget(self.manual_filename_edit)
         toolbar_manual.addAction(self._actions['save_manual_measure'])
         self.addToolBarBreak()
+
+        toolbar_monitoring = QToolBar("Monitoring")
+        self.addToolBar(toolbar_monitoring)
+        toolbar_monitoring.addAction(self._actions['show_robot_log'])
+        toolbar_monitoring.addAction(self._actions['show_pulse_log'])
+        toolbar_monitoring.addSeparator()
+
         toolbar_robot = QToolBar("Outils Robot")
         self.addToolBar(toolbar_robot)
         toolbar_robot.addWidget(QLabel("Robot : "))
         toolbar_robot.addAction(self._actions['goto_parking'])
         toolbar_robot.addAction(self._actions['goto_zero'])
         toolbar_robot.addAction(self._actions['goto_selected'])
+
         toolbar_edition = QToolBar("Édition Liste")
         toolbar_edition.setOrientation(Qt.Orientation.Vertical)
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, toolbar_edition)
@@ -568,10 +628,33 @@ class MainWindow(QMainWindow):
         self.status_bar_labels['Theta'].setText(f"θ: {round(robot_pos.get('THETA', 0.0))}")
         self.status_bar_labels['Phi'].setText(f"φ: {round(robot_pos.get('PHI', 0.0))}")
 
+    @Slot()
+    def _open_robot_log_viewer(self):
+        """Ouvre ou active la fenêtre de log du robot."""
+        if self.robot_log_window is None or not self.robot_log_window.isVisible():
+            self.robot_log_window = LogViewerWindow(
+                str(ROBOT_LOG_FILE), "Logs Robot & Application", "log_robot.png", self
+            )
+            self.robot_log_window.show()
+        else:
+            self.robot_log_window.activateWindow()
+            self.robot_log_window.raise_()
+
+    @Slot()
+    def _open_pulse_log_viewer(self):
+        """Ouvre ou active la fenêtre de log de PULSE."""
+        if self.pulse_log_window is None or not self.pulse_log_window.isVisible():
+            self.pulse_log_window = LogViewerWindow(
+                str(PULSE_LOG_FILE), "Logs Interface PULSE LabShop", "log_pulse.png", self
+            )
+            self.pulse_log_window.show()
+        else:
+            self.pulse_log_window.activateWindow()
+            self.pulse_log_window.raise_()
+
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(name)s - %(levelname)s - (%(threadName)s) %(message)s')
+    setup_logging()
     app = QApplication(sys.argv)
     pixmap = ResourceManager.get_pixmap('splash.png')
     splash = QSplashScreen(pixmap)

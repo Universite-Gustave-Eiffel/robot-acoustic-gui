@@ -120,7 +120,6 @@ class PulseLabshopDriver:
         self.save_path_dir = save_path_dir if save_path_dir else os.path.join(script_dir, "mesures_pulse_ascii")
         self.function_group_name_to_save_param = function_group_name_to_save
         self.log_dir_param = log_dir if log_dir else os.path.join(script_dir, "logs_pulse_driver")
-        self._setup_file_logging()
 
         logger.info(f"Chemin du projet à charger: {self.project_path_to_load}")
         logger.info(f"Répertoire de sauvegarde des mesures: {self.save_path_dir}")
@@ -142,23 +141,6 @@ class PulseLabshopDriver:
         self.event_thread = None
         self.event_thread_running = False
         logger.info("PulseLabshopDriver instancié.")
-
-    def _setup_file_logging(self):
-        if not os.path.exists(self.log_dir_param):
-            try:
-                os.makedirs(self.log_dir_param, exist_ok=True)
-            except OSError as e:
-                logger.error(f"Impossible de créer le répertoire de logs '{self.log_dir_param}': {e}."); return
-        log_filename = f"pulse_driver_log_{time.strftime('%Y%m%d_%H%M%S')}.log"
-        log_filepath = os.path.join(self.log_dir_param, log_filename)
-        file_handler = logging.FileHandler(log_filepath, encoding='utf-8')
-        file_handler.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s - [%(levelname)s] (%(threadName)s) %(name)s: %(message)s')
-        file_handler.setFormatter(formatter)
-        app_logger = logging.getLogger("RobotApp.PulseDriver")
-        if not any(isinstance(h, logging.FileHandler) for h in app_logger.handlers):
-            app_logger.addHandler(file_handler)
-        logger.info(f"Logging vers fichier configuré: {log_filepath}")
 
     def _event_pump_loop(self):
         # ... (Identique)
