@@ -405,6 +405,12 @@ class MainController(QObject):
         }
         self.move_capsule_absolute(capsule_coords)
 
+    def create_new_point_list(self):
+        """Réinitialise le gestionnaire de points pour une nouvelle liste."""
+        self.point_manager.points.clear()
+        self.current_file_path = None
+        self.log_message_sent.emit("Nouvelle liste de points créée.")
+
     @Slot(dict)
     def define_robot_position(self, capsule_coords: dict):
         if not self.robot: return

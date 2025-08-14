@@ -151,6 +151,7 @@ class MainWindow(QMainWindow):
         return action
 
     def _create_actions_and_connections(self) -> None:
+        self._add_action('nouveau', 'new_file.png', '&Nouveau', "Créer une nouvelle liste de points", 'Ctrl+N',self._on_new_triggered)
         self._add_action('quitter', 'exit.png', '&Quitter', "Quitter l'application", 'Ctrl+Q', self.close)
         self._add_action('config', 'settings.png', 'Configuration...', "Configurer l'application",
                          slot=self._open_config_window)
@@ -208,6 +209,7 @@ class MainWindow(QMainWindow):
     def _create_menus(self) -> None:
         menu_bar = self.menuBar()
         menu_fichier = menu_bar.addMenu('&Fichier')
+        menu_fichier.addAction(self._actions['nouveau'])
         menu_fichier.addAction(self._actions['ouvrir'])
         menu_fichier.addAction(self._actions['enregistrer'])
         menu_fichier.addAction(self._actions['enregistrer_sous'])
@@ -224,6 +226,7 @@ class MainWindow(QMainWindow):
     def _create_toolbars(self) -> None:
         toolbar_file = QToolBar("Fichier")
         self.addToolBar(toolbar_file)
+        toolbar_file.addAction(self._actions['nouveau'])
         toolbar_file.addAction(self._actions['ouvrir'])
         toolbar_file.addAction(self._actions['enregistrer'])
 
@@ -241,6 +244,7 @@ class MainWindow(QMainWindow):
 
         toolbar_manual = QToolBar("Mesure Manuelle")
         self.addToolBar(toolbar_manual)
+        toolbar_manual.addWidget(QLabel("Pulse : "))
         toolbar_manual.addAction(self._actions['toggle_pulse'])
         toolbar_manual.addSeparator()
         toolbar_manual.addAction(self._actions['start_manual_measure'])
@@ -252,6 +256,7 @@ class MainWindow(QMainWindow):
 
         toolbar_monitoring = QToolBar("Monitoring")
         self.addToolBar(toolbar_monitoring)
+        toolbar_monitoring.addWidget(QLabel("Logs : "))
         toolbar_monitoring.addAction(self._actions['show_robot_log'])
         toolbar_monitoring.addAction(self._actions['show_pulse_log'])
         toolbar_monitoring.addSeparator()
@@ -651,6 +656,24 @@ class MainWindow(QMainWindow):
         else:
             self.pulse_log_window.activateWindow()
             self.pulse_log_window.raise_()
+
+    @Slot()
+    def _on_new_triggered(self):
+        """Gère la création d'une nouvelle liste de points."""
+        if not self.undo_stack.isClean():
+            reply = QMessageBox.question(self, "Modifications non sauvegardées",
+                                         "Voulez-vous sauvegarder vos modifications avant de créer un nouveau fichier ?",
+                                         QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
+            if reply == QMessageBox.StandardButton.Save:
+                if not self._on_save_triggered():
+                    return  # L'utilisateur a annulé la sauvegarde
+            elif reply == QMessageBox.StandardButton.Cancel:
+                return  # Annuler l'opération "Nouveau"
+
+        # Procéder à la création du nouveau fichier
+        self.controller.create_new_point_list()
+        self.undo_stack.clear()  # Ceci remet l'état à "propre"
+        self.controller.point_list_changed.emit([])  # Émettre avec une liste vide pour vider le tableau
 
 
 if __name__ == '__main__':
