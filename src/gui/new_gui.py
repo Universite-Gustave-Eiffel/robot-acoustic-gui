@@ -152,6 +152,7 @@ class MainWindow(QMainWindow):
 
     def _create_actions_and_connections(self) -> None:
         self._add_action('nouveau', 'new_file.png', '&Nouveau', "Créer une nouvelle liste de points", 'Ctrl+N',self._on_new_triggered)
+        self._add_action('urgence', 'stop.png', 'Arrêt d\'Urgence', "Arrêt immédiat de tous les mouvements", 'F12',self.controller.emergency_stop)
         self._add_action('quitter', 'exit.png', '&Quitter', "Quitter l'application", 'Ctrl+Q', self.close)
         self._add_action('config', 'settings.png', 'Configuration...', "Configurer l'application",
                          slot=self._open_config_window)
@@ -240,6 +241,7 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar_sequence)
         toolbar_sequence.addAction(self._actions['start_sequence'])
         toolbar_sequence.addAction(self._actions['pause_sequence'])
+        toolbar_sequence.addAction(self._actions['urgence'])
         toolbar_sequence.addAction(self._actions['next_point'])
 
         toolbar_manual = QToolBar("Mesure Manuelle")
@@ -406,6 +408,7 @@ class MainWindow(QMainWindow):
         self._actions['start_sequence'].setEnabled(not running and has_points)
         self._actions['next_point'].setEnabled(not running and single_selection)
         self._actions['pause_sequence'].setEnabled(running)
+        self._actions['urgence'].setEnabled(running)
 
         self._actions['add_point'].setEnabled(not running)
         self._actions['delete_point'].setEnabled(not running and has_selection)
