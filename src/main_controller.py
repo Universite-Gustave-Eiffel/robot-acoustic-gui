@@ -288,9 +288,15 @@ class MainController(QObject):
         point = self.sequence_thread.context['points'][point_index]
         num_measurements = point.num_measurements
         success = True
-        saved_filename = filename
+        base_filename, ext = os.path.splitext(filename)
+        if not ext:
+            ext = ".txt"
+
+        # Reconstruire le nom de fichier avec l'extension
+        filename_with_ext = f"{base_filename}{ext}"
+        saved_filename = filename_with_ext
         if num_measurements > 1:
-            base, ext = os.path.splitext(filename)
+            base, ext = os.path.splitext(filename_with_ext)
             for i in range(num_measurements):
                 iteration_filename = f"{base}_{i + 1}{ext}"
                 if not self.pulse.save_function_group_ascii(iteration_filename):
@@ -302,7 +308,7 @@ class MainController(QObject):
             if success:
                 saved_filename = f"{base}_(x{num_measurements}){ext}"
         else:
-            if not self.pulse.save_function_group_ascii(filename):
+            if not self.pulse.save_function_group_ascii(filename_with_ext):
                 success = False
                 saved_filename = f"Échec de sauvegarde vers {filename}"
         self.measure_action_completed.emit(success, saved_filename)
