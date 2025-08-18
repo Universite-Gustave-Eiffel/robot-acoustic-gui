@@ -451,7 +451,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Séquence en cours", "Veuillez d'abord arrêter la séquence avant de quitter.")
             event.ignore()
             return
+
         self.controller.sync_points_from_gui(self._get_table_data())
+
         if not self.undo_stack.isClean():
             reply = QMessageBox.question(self, "Quitter",
                                          "Des modifications n'ont pas été sauvegardées.\nVoulez-vous les enregistrer avant de quitter ?",
@@ -463,9 +465,25 @@ class MainWindow(QMainWindow):
             elif reply == QMessageBox.StandardButton.Cancel:
                 event.ignore()
                 return
-        self.controller.disconnect_robot()
-        if self.telecommande_window: self.telecommande_window.close()
+
+        # --- MODIFICATION DE LA SÉQUENCE DE FERMETURE ---
+
+        # 1. Accepter l'événement de fermeture pour que Qt sache que la fenêtre va se fermer.
         event.accept()
+
+        # 2. Cacher la fenêtre explicitement. Cela retire l'interface de l'écran.
+        self.hide()
+
+        # 3. Fermer les fenêtres enfants qui pourraient dépendre du contrôleur.
+        if self.telecommande_window:
+            self.telecommande_window.close()
+        if self.robot_log_window:
+            self.robot_log_window.close()
+        if self.pulse_log_window:
+            self.pulse_log_window.close()
+
+        # 4. Maintenant, faire le nettoyage lourd (déconnexion matériel).
+        self.controller.disconnect_robot()
 
     @Slot()
     def _open_point_file_dialog(self):
