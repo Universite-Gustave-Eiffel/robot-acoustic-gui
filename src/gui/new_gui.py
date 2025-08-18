@@ -3,8 +3,8 @@
 
 import sys
 import logging
-import time
 import logging.handlers
+import time
 import os
 from pathlib import Path
 from typing import Optional, Dict
@@ -26,11 +26,12 @@ from src.gui.resource_manager import ResourceManager
 from src.gui.commands import AddPointCommand, DeletePointsCommand, MovePointCommand, ChangeCellCommand
 from src.gui.log_viewer_window import LogViewerWindow
 
+
+# --- CONFIGURATION CENTRALISÉE DES LOGS ---
 LOG_DIR = Path("logs")
 LOG_DIR.mkdir(exist_ok=True)
 ROBOT_LOG_FILE = LOG_DIR / "robot_app.log"
 PULSE_LOG_FILE = LOG_DIR / "pulse_driver.log"
-
 
 def setup_logging():
     """Configure les loggers pour l'application avec des fichiers distincts."""
@@ -68,6 +69,7 @@ def setup_logging():
     logging.getLogger("RobotApp.PulseDriver").propagate = False
 
     logging.info("Système de logging initialisé.")
+# --- FIN DE LA SECTION LOGS ---
 
 
 class IntegerDelegate(QStyledItemDelegate):
@@ -92,7 +94,6 @@ class MainWindow(QMainWindow):
         self.telecommande_window: Optional[TelecommandeWindow] = None
         self.robot_log_window: Optional[LogViewerWindow] = None
         self.pulse_log_window: Optional[LogViewerWindow] = None
-        self._actions: Dict[str, QAction] = {}
         self._actions: Dict[str, QAction] = {}
         self.current_highlighted_row = -1
         self._is_sequence_running = False
@@ -151,8 +152,10 @@ class MainWindow(QMainWindow):
         return action
 
     def _create_actions_and_connections(self) -> None:
-        self._add_action('nouveau', 'new_file.png', '&Nouveau', "Créer une nouvelle liste de points", 'Ctrl+N',self._on_new_triggered)
-        self._add_action('urgence', 'stop.png', 'Arrêt d\'Urgence', "Arrêt immédiat de tous les mouvements", 'F12',self.controller.emergency_stop)
+        self._add_action('urgence', 'stop.png', 'Arrêt d\'Urgence', "Arrêt immédiat de tous les mouvements", 'F12',
+                         self.controller.emergency_stop)
+        self._add_action('nouveau', 'new_file.png', '&Nouveau', "Créer une nouvelle liste de points", 'Ctrl+N',
+                         self._on_new_triggered)
         self._add_action('quitter', 'exit.png', '&Quitter', "Quitter l'application", 'Ctrl+Q', self.close)
         self._add_action('config', 'settings.png', 'Configuration...', "Configurer l'application",
                          slot=self._open_config_window)
@@ -197,11 +200,12 @@ class MainWindow(QMainWindow):
                          "Arrête la séquence après l'étape en cours", slot=self.controller.stop_sequence)
 
         self._add_action('toggle_pulse', 'pulse.png', 'Afficher/Cacher PULSE',
-                         "Affiche ou cache la fenêtre de PULSE LabShop",slot=self.controller.toggle_pulse_visibility)
+                         "Affiche ou cache la fenêtre de PULSE LabShop", slot=self.controller.toggle_pulse_visibility)
         self._add_action('start_manual_measure', 'start_measurement.png', 'Démarrer mesure manuelle',
                          "Démarrer une mesure PULSE unique", slot=self.controller.start_manual_measurement)
         self._add_action('save_manual_measure', 'save_measurement.png', 'Sauvegarder mesure manuelle',
                          "Sauvegarder la dernière mesure manuelle", slot=self._on_save_manual_measure_triggered)
+
         self._add_action('show_robot_log', 'log_robot.png', 'Afficher Logs Robot',
                          "Ouvre la fenêtre des logs du robot et du contrôleur", slot=self._open_robot_log_viewer)
         self._add_action('show_pulse_log', 'log_pulse.png', 'Afficher Logs PULSE',
@@ -241,12 +245,12 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar_sequence)
         toolbar_sequence.addAction(self._actions['start_sequence'])
         toolbar_sequence.addAction(self._actions['pause_sequence'])
-        toolbar_sequence.addAction(self._actions['urgence'])
         toolbar_sequence.addAction(self._actions['next_point'])
+        toolbar_sequence.addSeparator()
+        toolbar_sequence.addAction(self._actions['urgence'])
 
         toolbar_manual = QToolBar("Mesure Manuelle")
         self.addToolBar(toolbar_manual)
-        toolbar_manual.addWidget(QLabel("Pulse : "))
         toolbar_manual.addAction(self._actions['toggle_pulse'])
         toolbar_manual.addSeparator()
         toolbar_manual.addAction(self._actions['start_manual_measure'])
@@ -258,7 +262,6 @@ class MainWindow(QMainWindow):
 
         toolbar_monitoring = QToolBar("Monitoring")
         self.addToolBar(toolbar_monitoring)
-        toolbar_monitoring.addWidget(QLabel("Logs : "))
         toolbar_monitoring.addAction(self._actions['show_robot_log'])
         toolbar_monitoring.addAction(self._actions['show_pulse_log'])
         toolbar_monitoring.addSeparator()
@@ -269,7 +272,6 @@ class MainWindow(QMainWindow):
         toolbar_robot.addAction(self._actions['goto_parking'])
         toolbar_robot.addAction(self._actions['goto_zero'])
         toolbar_robot.addAction(self._actions['goto_selected'])
-
         toolbar_edition = QToolBar("Édition Liste")
         toolbar_edition.setOrientation(Qt.Orientation.Vertical)
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, toolbar_edition)
@@ -416,6 +418,7 @@ class MainWindow(QMainWindow):
         self._actions['move_point_down'].setEnabled(
             not running and single_selection and list(selected_rows)[0] < self.points_table.rowCount() - 1)
 
+        self._actions['nouveau'].setEnabled(not running)
         self._actions['ouvrir'].setEnabled(not running)
         self._actions['enregistrer'].setEnabled(not running and self.controller.is_modified)
         self._actions['enregistrer_sous'].setEnabled(not running)
@@ -480,6 +483,24 @@ class MainWindow(QMainWindow):
         if file_path:
             self.controller.process_loaded_file(file_path)
             self.undo_stack.clear()
+
+    @Slot()
+    def _on_new_triggered(self):
+        """Gère la création d'une nouvelle liste de points."""
+        if not self.undo_stack.isClean():
+            reply = QMessageBox.question(self, "Modifications non sauvegardées",
+                                         "Voulez-vous sauvegarder vos modifications avant de créer un nouveau fichier ?",
+                                         QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
+            if reply == QMessageBox.StandardButton.Save:
+                if not self._on_save_triggered():
+                    return  # L'utilisateur a annulé la sauvegarde
+            elif reply == QMessageBox.StandardButton.Cancel:
+                return  # Annuler l'opération "Nouveau"
+
+        # Procéder à la création du nouveau fichier
+        self.controller.create_new_point_list()
+        self.undo_stack.clear()  # Ceci remet l'état à "propre"
+        self.controller.point_list_changed.emit([])  # Émettre avec une liste vide pour vider le tableau
 
     @Slot()
     def _on_save_triggered(self) -> bool:
@@ -578,24 +599,23 @@ class MainWindow(QMainWindow):
             if header in numeric_columns:
                 self.points_table.setItemDelegateForColumn(col_index, integer_delegate)
 
-        if not points:
-            self.points_table.itemChanged.connect(self._on_cell_changed)
-            self._update_actions_state()
-            return
-        self.points_table.setRowCount(len(points))
-        for row_index, point_data in enumerate(points):
-            for col_index, header in enumerate(headers):
-                value = point_data.get(header, "")
-                if isinstance(value, (float, int)):
-                    item = QTableWidgetItem(f"{round(value)}")
-                    item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                else:
-                    item = QTableWidgetItem(str(value))
-                    item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                self.points_table.setItem(row_index, col_index, item)
+        if points:
+            self.points_table.setRowCount(len(points))
+            for row_index, point_data in enumerate(points):
+                for col_index, header in enumerate(headers):
+                    value = point_data.get(header, "")
+                    if isinstance(value, (float, int)):
+                        item = QTableWidgetItem(f"{round(value)}")
+                        item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                    else:
+                        item = QTableWidgetItem(str(value))
+                        item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                    self.points_table.setItem(row_index, col_index, item)
 
-        self.points_table.resizeColumnsToContents()
-        self.points_table.horizontalHeader().setStretchLastSection(True)
+
+        header = self.points_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+
         self.points_table.itemChanged.connect(self._on_cell_changed)
         self._update_actions_state()
 
@@ -659,24 +679,6 @@ class MainWindow(QMainWindow):
         else:
             self.pulse_log_window.activateWindow()
             self.pulse_log_window.raise_()
-
-    @Slot()
-    def _on_new_triggered(self):
-        """Gère la création d'une nouvelle liste de points."""
-        if not self.undo_stack.isClean():
-            reply = QMessageBox.question(self, "Modifications non sauvegardées",
-                                         "Voulez-vous sauvegarder vos modifications avant de créer un nouveau fichier ?",
-                                         QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
-            if reply == QMessageBox.StandardButton.Save:
-                if not self._on_save_triggered():
-                    return  # L'utilisateur a annulé la sauvegarde
-            elif reply == QMessageBox.StandardButton.Cancel:
-                return  # Annuler l'opération "Nouveau"
-
-        # Procéder à la création du nouveau fichier
-        self.controller.create_new_point_list()
-        self.undo_stack.clear()  # Ceci remet l'état à "propre"
-        self.controller.point_list_changed.emit([])  # Émettre avec une liste vide pour vider le tableau
 
 
 if __name__ == '__main__':

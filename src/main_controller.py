@@ -171,6 +171,12 @@ class MainController(QObject):
             return True
         return False
 
+    def create_new_point_list(self):
+        """Réinitialise le gestionnaire de points pour une nouvelle liste."""
+        self.point_manager.points.clear()
+        self.current_file_path = None
+        self.log_message_sent.emit("Nouvelle liste de points créée.")
+
     def add_current_position_as_point(self) -> Point:
         if not self.robot: return None
         with self.robot_lock:
@@ -282,35 +288,24 @@ class MainController(QObject):
         self.measure_action_completed.emit(True, "Mesure arrêtée")
 
     @Slot(str)
-    def _on_save_measure_requested(self, filename):
-        if not self.pulse: self.measure_action_completed.emit(False, "Pulse non initialisé"); return
-        point_index = self.sequence_thread.context['current_index']
-        point = self.sequence_thread.context['points'][point_index]
-        num_measurements = point.num_measurements
-        success = True
-        base_filename, ext = os.path.splitext(filename)
-        if not ext:
-            ext = ".txt"
+    def _on_save_measure_requested(self, filename: str):
+        """Exécute une demande de sauvegarde unique et atomique pour la FSM."""
+        if not self.pulse:
+            self.measure_action_completed.emit(False, "Pulse non initialisé")
+            return
 
-        # Reconstruire le nom de fichier avec l'extension
-        filename_with_ext = f"{base_filename}{ext}"
-        saved_filename = filename_with_ext
-        if num_measurements > 1:
-            base, ext = os.path.splitext(filename_with_ext)
-            for i in range(num_measurements):
-                iteration_filename = f"{base}_{i + 1}{ext}"
-                if not self.pulse.save_function_group_ascii(iteration_filename):
-                    success = False
-                    saved_filename = f"Échec de sauvegarde vers {iteration_filename}"
-                    break
-                time.sleep(0.1)
-                if not self.sequence_thread._is_running: break
-            if success:
-                saved_filename = f"{base}_(x{num_measurements}){ext}"
+        # S'assurer que le nom de fichier a une extension (mesure de sécurité)
+        base, ext = os.path.splitext(filename)
+        if not ext:
+            filename = f"{base}.txt"
+
+        success = self.pulse.save_function_group_ascii(filename)
+
+        if success:
+            saved_filename = f"Sauvegarde réussie : {filename}"
         else:
-            if not self.pulse.save_function_group_ascii(filename_with_ext):
-                success = False
-                saved_filename = f"Échec de sauvegarde vers {filename}"
+            saved_filename = f"Échec de sauvegarde vers {filename}"
+
         self.measure_action_completed.emit(success, saved_filename)
 
     @Slot()
@@ -410,12 +405,6 @@ class MainController(QObject):
             'PHI': float(point_data.get('phi', 0.0))
         }
         self.move_capsule_absolute(capsule_coords)
-
-    def create_new_point_list(self):
-        """Réinitialise le gestionnaire de points pour une nouvelle liste."""
-        self.point_manager.points.clear()
-        self.current_file_path = None
-        self.log_message_sent.emit("Nouvelle liste de points créée.")
 
     @Slot(dict)
     def define_robot_position(self, capsule_coords: dict):

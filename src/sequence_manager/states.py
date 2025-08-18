@@ -1,6 +1,7 @@
 # src/sequence_manager/states.py
 import time
 import logging
+import os
 
 
 class State:
@@ -76,7 +77,11 @@ class StateStartMeasure(State):
 
     def execute(self, context):
         seq_manager = context['sequence_manager']
-        self.logger.info(f"Démarrage de la mesure pour le point {context['current_index'] + 1}.")
+        # Initialiser le compteur de mesures pour ce point si ce n'est pas déjà fait
+        context.setdefault('measurement_count', 0)
+
+        self.logger.info(
+            f"Démarrage de la mesure #{context['measurement_count'] + 1} pour le point {context['current_index'] + 1}.")
         seq_manager.action_completed_event.clear()
         seq_manager.action_success = False
         seq_manager.start_measure_requested.emit()
@@ -123,25 +128,54 @@ class StateSaveMeasure(State):
     def execute(self, context):
         seq_manager = context['sequence_manager']
         point_index = context['current_index']
+        point = context['points'][point_index]
+        num_measurements = point.num_measurements
 
-        base_filename = context['points'][point_index].measurement_file
+        base_filename = point.measurement_file
         if not base_filename:
             base_filename = f"{context.get('base_filename', 'mesure')}_point_{point_index + 1:03d}"
 
-        self.logger.info(f"Demande de sauvegarde vers '{base_filename}'")
+        # Gérer les noms de fichiers multiples
+        final_filename = base_filename
+        if num_measurements > 1:
+            base, ext = os.path.splitext(base_filename)
+            if not ext:
+                ext = ".txt"
+            current_count = context.get('measurement_count', 0)
+            final_filename = f"{base}_{current_count + 1}{ext}"
+
+        self.logger.info(f"Demande de sauvegarde vers '{final_filename}'")
         seq_manager.action_completed_event.clear()
         seq_manager.action_success = False
 
-        seq_manager.save_measure_requested.emit(base_filename)
+        seq_manager.save_measure_requested.emit(final_filename)
         context['previous_state'] = StateSaveMeasure
         return StateWaitingForMeasureAction, context
 
 
 class StateNextPoint(State):
-    """Passe au point suivant, ou termine."""
+    """Passe au point suivant, ou relance une mesure, ou termine."""
 
     def execute(self, context):
         seq_manager = context['sequence_manager']
+        point_index = context['current_index']
+        point = context['points'][point_index]
+
+        # Incrémenter le compteur de mesures pour le point actuel
+        context['measurement_count'] = context.get('measurement_count', 0) + 1
+        self.logger.info(
+            f"{context['measurement_count']} sur {point.num_measurements} mesure(s) effectuée(s) pour ce point.")
+
+        # Vérifier si on doit faire d'autres mesures sur le même point
+        if context['measurement_count'] < point.num_measurements:
+            self.logger.info("Bouclage pour la prochaine mesure sur le même point.")
+            return StateStartMeasure, context
+
+        # Si toutes les mesures pour ce point sont faites, on passe à la suite
+        self.logger.info("Toutes les mesures pour ce point sont terminées.")
+
+        # Réinitialiser le compteur pour le prochain point
+        context['measurement_count'] = 0
 
         if seq_manager.single_shot:
             self.logger.info("Mode 'Point Suivant' : Séquence terminée.")
