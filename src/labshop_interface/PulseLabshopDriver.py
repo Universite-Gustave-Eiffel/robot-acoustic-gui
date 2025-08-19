@@ -113,13 +113,12 @@ class PulseLabshopDriver:
     pour une interaction robuste et asynchrone.
     """
 
-    def __init__(self, project_path=None, save_path_dir=None, function_group_name_to_save="ASauver", log_dir=None):
+    def __init__(self, project_path=None, save_path_dir=None, function_group_name_to_save="ASauver"):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.project_path_to_load = project_path if project_path else os.path.join(script_dir, "pulse_projects",
                                                                                    "MinimalTest.pls")
         self.save_path_dir = save_path_dir if save_path_dir else os.path.join(script_dir, "mesures_pulse_ascii")
         self.function_group_name_to_save_param = function_group_name_to_save
-        self.log_dir_param = log_dir if log_dir else os.path.join(script_dir, "logs_pulse_driver")
 
         logger.info(f"Chemin du projet à charger: {self.project_path_to_load}")
         logger.info(f"Répertoire de sauvegarde des mesures: {self.save_path_dir}")

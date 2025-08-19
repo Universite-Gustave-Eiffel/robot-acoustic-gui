@@ -78,8 +78,7 @@ class MainController(QObject):
             self.pulse = PulseLabshopDriver(
                 project_path=self.pulse_config.get('PulseSettings', 'project_path'),
                 save_path_dir=self.pulse_config.get('PulseSettings', 'save_path_dir'),
-                function_group_name_to_save=self.pulse_config.get('PulseSettings', 'function_group_to_save'),
-                log_dir=self.pulse_config.get('PulseSettings', 'log_dir')
+                function_group_name_to_save=self.pulse_config.get('PulseSettings', 'function_group_to_save')
             )
             if self.pulse.initialize_pulse():
                 self.log_message_sent.emit("Interface PULSE LabShop initialisée avec succès.")

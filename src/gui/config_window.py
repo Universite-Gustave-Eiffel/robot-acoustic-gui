@@ -160,10 +160,6 @@ class ConfigWindow(QDialog):
         paths_layout.addRow(QLabel("Répertoire de sauvegarde :"), self.pulse_save_dir_edit)
         paths_layout.addRow("", self.pulse_save_dir_btn)
 
-        self.pulse_log_dir_edit, self.pulse_log_dir_btn = self._create_path_selector(is_dir=True)
-        paths_layout.addRow(QLabel("Répertoire de logs :"), self.pulse_log_dir_edit)
-        paths_layout.addRow("", self.pulse_log_dir_btn)
-
         self.pulse_fg_name = QLineEdit()
         paths_layout.addRow(QLabel("FunctionGroup à sauver :"), self.pulse_fg_name)
 
@@ -221,7 +217,6 @@ class ConfigWindow(QDialog):
             self.initial_pulse_project = p_cfg.get('PulseSettings', 'project_path', fallback="")
             self.pulse_project_path_edit.setText(self.initial_pulse_project)
             self.pulse_save_dir_edit.setText(p_cfg.get('PulseSettings', 'save_path_dir', fallback=""))
-            self.pulse_log_dir_edit.setText(p_cfg.get('PulseSettings', 'log_dir', fallback=""))
             self.pulse_fg_name.setText(p_cfg.get('PulseSettings', 'function_group_to_save', fallback=""))
 
     def _ensure_sections(self, cfg, sections):
@@ -275,7 +270,6 @@ class ConfigWindow(QDialog):
 
             pulse_cfg.set('PulseSettings', 'project_path', self.pulse_project_path_edit.text())
             pulse_cfg.set('PulseSettings', 'save_path_dir', self.pulse_save_dir_edit.text())
-            pulse_cfg.set('PulseSettings', 'log_dir', self.pulse_log_dir_edit.text())
             pulse_cfg.set('PulseSettings', 'function_group_to_save', self.pulse_fg_name.text())
 
             self.controller.save_all_configurations()
