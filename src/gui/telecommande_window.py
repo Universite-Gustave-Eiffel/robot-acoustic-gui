@@ -11,6 +11,7 @@ import configparser
 
 from src.gui.resource_manager import ResourceManager
 from src.main_controller import MainController
+from src.gui.commands import AddPointCommand
 
 
 class TelecommandeWindow(QMainWindow):
@@ -21,6 +22,7 @@ class TelecommandeWindow(QMainWindow):
     def __init__(self, controller: MainController, parent=None):
         super().__init__(parent)
         self.controller = controller
+        self.main_window = parent
         self.setWindowTitle('Télécommande du robot')
         self.setWindowIcon(QIcon(ResourceManager.get_icon_path('joystick.png')))
         self.setGeometry(200, 200, 750, 600)
@@ -203,9 +205,8 @@ class TelecommandeWindow(QMainWindow):
     def _create_point_creation_panel(self) -> QGroupBox:
         self.point_creation_group = QGroupBox("Ajout de Point à la Séquence")
         layout = QHBoxLayout(self.point_creation_group)
-        store_button = QPushButton(QIcon(ResourceManager.get_icon_path('add.png')),
-                                   "Ajouter la position actuelle du robot à la liste")
-        store_button.clicked.connect(self.controller.add_current_position_as_point)
+        store_button = QPushButton(QIcon(ResourceManager.get_icon_path('add.png')),"Ajouter la position capsule actuelle à la liste")
+        store_button.clicked.connect(self._on_add_point_to_list)
         layout.addWidget(store_button)
         return self.point_creation_group
 
@@ -214,6 +215,18 @@ class TelecommandeWindow(QMainWindow):
         self.jogging_group.setEnabled(not is_locked)
         self.absolute_move_group.setEnabled(not is_locked)
         self.point_creation_group.setEnabled(not is_locked)
+
+    @Slot()
+    def _on_add_point_to_list(self):
+        """Récupère la position actuelle et l'ajoute à la liste via une commande Undo."""
+        if not self.main_window:
+            return
+
+        point_to_add = self.controller.add_current_position_as_point()
+        if point_to_add:
+            command = AddPointCommand(self.controller, self.main_window, point_to_add)
+            self.main_window.undo_stack.push(command)
+            self.controller.log_message_sent.emit("Point ajouté à la liste depuis la télécommande.")
 
     @Slot(bool)
     def _on_keyboard_control_toggled(self, checked):
