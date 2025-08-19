@@ -31,6 +31,7 @@ class TelecommandeWindow(QMainWindow):
         self.capsule_pos_widgets = {}
         self.jog_widgets = {}
         self.absolute_target_widgets = {}
+        self.toolbar_actions = {}
 
         self.keyboard_control_active = False
         self.active_jogs = {}
@@ -77,22 +78,31 @@ class TelecommandeWindow(QMainWindow):
     def _create_actions_and_toolbar(self):
         toolbar = QToolBar("Commandes de Référence")
         self.addToolBar(toolbar)
+
         stop_action = QAction(QIcon(ResourceManager.get_icon_path('stop.png')), "Arrêt d'Urgence", self)
         stop_action.triggered.connect(self.controller.emergency_stop)
+        self.toolbar_actions['stop'] = stop_action
         toolbar.addAction(stop_action)
+
         toolbar.addSeparator()
+
         set_zero_action = QAction(QIcon(ResourceManager.get_icon_path('set_zero.png')), "Définir Zéro Capsule Actuel",
                                   self)
         set_zero_action.triggered.connect(self.controller.set_robot_zero_position)
+        self.toolbar_actions['set_zero'] = set_zero_action
         toolbar.addAction(set_zero_action)
+
         set_parking_action = QAction(QIcon(ResourceManager.get_icon_path('parking.png')), "Définir Parking Actuel",
                                      self)
         set_parking_action.triggered.connect(self.controller.set_robot_parking_position)
+        self.toolbar_actions['set_parking'] = set_parking_action
         toolbar.addAction(set_parking_action)
+
         define_pos_action = QAction(QIcon(ResourceManager.get_icon_path('set_position.png')), "Forcer Position", self)
         define_pos_action.setStatusTip(
             "Définit la position physique actuelle du robot aux coordonnées capsule spécifiées dans les champs 'Aller à'")
         define_pos_action.triggered.connect(self._on_define_position)
+        self.toolbar_actions['define_pos'] = define_pos_action
         toolbar.addAction(define_pos_action)
 
     def _create_position_display_panel(self) -> QGroupBox:
@@ -215,6 +225,10 @@ class TelecommandeWindow(QMainWindow):
         self.jogging_group.setEnabled(not is_locked)
         self.absolute_move_group.setEnabled(not is_locked)
         self.point_creation_group.setEnabled(not is_locked)
+        self.toolbar_actions['stop'].setEnabled(True)
+        self.toolbar_actions['set_zero'].setEnabled(not is_locked)
+        self.toolbar_actions['set_parking'].setEnabled(not is_locked)
+        self.toolbar_actions['define_pos'].setEnabled(not is_locked)
 
     @Slot()
     def _on_add_point_to_list(self):
