@@ -247,6 +247,7 @@ class TelecommandeWindow(QMainWindow):
                 self.controller.robot.software_reset()
                 self.controller.log_message_sent.emit("Contrôleur réinitialisé et prêt.")
             self.active_jogs.clear()
+            self._on_use_current_pos()
 
     @Slot(dict, dict)
     def update_position_display(self, robot_pos: dict, capsule_pos: dict):
