@@ -580,7 +580,7 @@ class MainWindow(QMainWindow):
         row = item.row()
         header = self.controller.get_point_headers()[col]
 
-        if header == 'measurement_file': return
+        if header == 'Nom_fichier': return
 
         old_value = getattr(self.controller.point_manager.points[row], header)
         new_value_text = item.text()
@@ -612,7 +612,7 @@ class MainWindow(QMainWindow):
         self.points_table.setHorizontalHeaderLabels([h.upper().replace("_", " ") for h in headers])
 
         integer_delegate = IntegerDelegate(self)
-        numeric_columns = ['x', 'y', 'z', 'theta', 'phi', 'num_measurements']
+        numeric_columns = ['x', 'y', 'z', 'theta', 'phi', 'Nb_mesures/point']
         for col_index, header in enumerate(headers):
             if header in numeric_columns:
                 self.points_table.setItemDelegateForColumn(col_index, integer_delegate)
@@ -624,10 +624,9 @@ class MainWindow(QMainWindow):
                     value = point_data.get(header, "")
                     if isinstance(value, (float, int)):
                         item = QTableWidgetItem(f"{round(value)}")
-                        item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                     else:
                         item = QTableWidgetItem(str(value))
-                        item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                     self.points_table.setItem(row_index, col_index, item)
 
 
