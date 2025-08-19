@@ -172,7 +172,7 @@ class TelecommandeWindow(QMainWindow):
             btn_minus = QPushButton("-")
             btn_minus.setFixedWidth(40)
             spin_box = QSpinBox()
-            spin_box.setRange(-1000, 1000)
+            spin_box.setRange(-3000, 3000)
             spin_box.setValue(10)
             unit = " mm" if axis in ['X', 'Y', 'Z'] else " °"
             spin_box.setSuffix(unit)
