@@ -29,7 +29,7 @@ class MainController(QObject):
     # Émet les coordonnées robot ET les coordonnées capsule
     robot_position_updated = Signal(dict, dict)
     # ---------------------------
-    robot_move_completed = Signal(dict)
+    robot_move_completed = Signal(dict,dict)
     point_list_changed = Signal(list)
     document_modified_status_changed = Signal(bool)
     sequence_status_changed = Signal(str)
@@ -426,9 +426,10 @@ class MainController(QObject):
         if not self.robot: return
         with self.robot_lock:
             self.robot.move_relative(**move_dict)
+            self.robot.update_positions()
         axis = list(move_dict.keys())[0]
         self.log_message_sent.emit(f"Mouvement relatif terminé sur l'axe {axis}.")
-        self.robot_move_completed.emit(self.robot.last_positions)
+        self.robot_move_completed.emit(self.robot.robot_pos, self.robot.capsule_pos)
 
     def move_robot_to_parking(self):
         if not self.robot: return

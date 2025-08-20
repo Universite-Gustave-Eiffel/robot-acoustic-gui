@@ -303,14 +303,20 @@ class TelecommandeWindow(QMainWindow):
                 # Pour les angles, la coordonnée capsule est la même que la coordonnée robot
                 self.capsule_pos_widgets[axis].setText(f"{round(robot_pos.get(axis.upper(), 0.0))}")
 
-    @Slot(dict)
-    def update_target_fields_after_event(self, last_robot_position: dict):
-        if not self.controller.robot: return
-        self.controller.robot.robot_pos = last_robot_position
-        self.controller.robot._calculate_capsule_position()
-        for axis, widget in self.absolute_target_widgets.items():
-            capsule_pos = self.controller.robot.capsule_pos.get(axis.upper(), 0.0)
-            widget.setValue(round(capsule_pos))
+    @Slot(dict, dict)
+    def update_target_fields_after_event(self, robot_pos: dict, capsule_pos: dict):
+        """
+        Après un mouvement, met à jour les champs de destination
+        avec les données finales fournies par le contrôleur.
+        """
+        if not robot_pos or not capsule_pos:
+            return
+
+        self.absolute_target_widgets['X'].setValue(round(capsule_pos.get('X', 0.0)))
+        self.absolute_target_widgets['Y'].setValue(round(capsule_pos.get('Y', 0.0)))
+        self.absolute_target_widgets['Z'].setValue(round(capsule_pos.get('Z', 0.0)))
+        self.absolute_target_widgets['THETA'].setValue(round(robot_pos.get('THETA', 0.0)))
+        self.absolute_target_widgets['PHI'].setValue(round(robot_pos.get('PHI', 0.0)))
 
     def _on_jog(self, axis, sign):
         distance = self.jog_widgets[axis].value()
