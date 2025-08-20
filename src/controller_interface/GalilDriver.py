@@ -199,37 +199,56 @@ class RobotController:
         return None
 
     def _calculate_capsule_position(self):
+        """
+        Calcule la position de la capsule à partir de la position du robot.
+        Équations alignées sur l'ancien logiciel VB.NET.
+        """
         x_r, y_r, z_r = self.robot_pos['X'], self.robot_pos['Y'], self.robot_pos['Z']
         theta_rad, phi_rad = math.radians(self.robot_pos['THETA']), math.radians(self.robot_pos['PHI'])
+
         offsets = self.config['OFFSETS']
         corr_t_x = offsets.getfloat('correction_theta_x')
         corr_t_y = offsets.getfloat('correction_theta_y')
-        corr_t_z = offsets.getfloat('correction_theta_z')
         corr_p_l = offsets.getfloat('correction_phi_l')
+
         ct, st = math.cos(theta_rad), math.sin(theta_rad)
         cp, sp = math.cos(phi_rad), math.sin(phi_rad)
-        x_p = x_r + (corr_t_x * ct) - (corr_t_y * st)
-        y_p = y_r + (corr_t_x * st) + (corr_t_y * ct)
-        z_p = z_r + corr_t_z
-        self.capsule_pos['X'] = x_p - (corr_p_l * cp * st)
-        self.capsule_pos['Y'] = y_p + (corr_p_l * cp * ct)
-        self.capsule_pos['Z'] = z_p - (corr_p_l * sp)
+
+        # Correction = (x_offset_theta) + (y_offset_phi)
+        correction_x = (corr_t_x * ct) - (corr_t_y * st) + (corr_p_l * cp * st)
+        correction_y = (corr_t_x * st) + (corr_t_y * ct) - (corr_p_l * cp * ct)
+        correction_z = -corr_p_l * sp
+
+        # CapsulePosition = RobotPosition + Correction
+        self.capsule_pos['X'] = x_r + correction_x
+        self.capsule_pos['Y'] = y_r + correction_y
+        self.capsule_pos['Z'] = z_r + correction_z
 
     def calculate_robot_coords_for_capsule(self, X, Y, Z, THETA, PHI):
+        """
+        Calcule les coordonnées robot nécessaires pour atteindre une cible capsule.
+        Équations alignées sur l'ancien logiciel VB.NET.
+        """
         theta_rad, phi_rad = math.radians(THETA), math.radians(PHI)
+
         offsets = self.config['OFFSETS']
         corr_t_x = offsets.getfloat('correction_theta_x')
         corr_t_y = offsets.getfloat('correction_theta_y')
-        corr_t_z = offsets.getfloat('correction_theta_z')
         corr_p_l = offsets.getfloat('correction_phi_l')
+
         ct, st = math.cos(theta_rad), math.sin(theta_rad)
         cp, sp = math.cos(phi_rad), math.sin(phi_rad)
-        x_p = X + (corr_p_l * cp * st)
-        y_p = Y - (corr_p_l * cp * ct)
-        z_p = Z + (corr_p_l * sp)
-        robot_x = x_p - (corr_t_x * ct) + (corr_t_y * st)
-        robot_y = y_p - (corr_t_x * st) - (corr_t_y * ct)
-        robot_z = z_p - corr_t_z
+
+        # Correction = (x_offset_theta) + (y_offset_phi)
+        correction_x = (corr_t_x * ct) - (corr_t_y * st) + (corr_p_l * cp * st)
+        correction_y = (corr_t_x * st) + (corr_t_y * ct) - (corr_p_l * cp * ct)
+        correction_z = -corr_p_l * sp
+
+        # RobotPosition = CapsulePosition - Correction
+        robot_x = X - correction_x
+        robot_y = Y - correction_y
+        robot_z = Z - correction_z
+
         return {'X': robot_x, 'Y': robot_y, 'Z': robot_z, 'THETA': THETA, 'PHI': PHI}
 
     def start_move_to(self, **kwargs) -> str:
