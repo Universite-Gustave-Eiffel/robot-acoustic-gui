@@ -32,7 +32,7 @@ class TelecommandeWindow(QMainWindow):
         self.jog_widgets = {}
         self.absolute_target_widgets = {}
         self.toolbar_actions = {}
-
+        self.use_first_point_button = None
         self.keyboard_control_active = False
         self.active_jogs = {}
 
@@ -53,6 +53,7 @@ class TelecommandeWindow(QMainWindow):
 
         self.controller.robot_position_updated.connect(self.update_position_display)
         self.controller.robot_move_completed.connect(self.update_target_fields_after_event)
+        self.controller.point_list_changed.connect(self.update_button_states)
 
         # Initialiser les champs avec la position actuelle si disponible
         if self.controller.robot and self.controller.robot.last_positions:
@@ -74,6 +75,7 @@ class TelecommandeWindow(QMainWindow):
         main_layout.addStretch()
 
         self._update_widgets_state()
+        self.update_button_states()
 
     def _create_actions_and_toolbar(self):
         toolbar = QToolBar("Commandes de Référence")
@@ -204,12 +206,16 @@ class TelecommandeWindow(QMainWindow):
         use_current_button = QPushButton("Utiliser Actuelle")
         use_current_button.setStatusTip("Copie la position actuelle de la capsule dans les champs de destination")
         go_button = QPushButton(QIcon(ResourceManager.get_icon_path('play.png')), "Aller à la position")
+        self.use_first_point_button = QPushButton(QIcon(ResourceManager.get_icon_path('get_first_point.png')),"Utiliser 1er Point de la liste")
+        self.use_first_point_button.setStatusTip("Copie les coordonnées du premier point de la liste dans les champs de destination")
         control_layout.addWidget(use_current_button)
         control_layout.addWidget(go_button)
+        control_layout.addWidget(self.use_first_point_button)
         control_layout.addStretch()
         layout.addLayout(control_layout)
         use_current_button.clicked.connect(self._on_use_current_pos)
         go_button.clicked.connect(self._on_go_absolute_capsule)
+        self.use_first_point_button.clicked.connect(self._on_use_first_point)
         return self.absolute_move_group
 
     def _create_point_creation_panel(self) -> QGroupBox:
@@ -241,6 +247,25 @@ class TelecommandeWindow(QMainWindow):
             command = AddPointCommand(self.controller, self.main_window, point_to_add)
             self.main_window.undo_stack.push(command)
             self.controller.log_message_sent.emit("Point ajouté à la liste depuis la télécommande.")
+
+    @Slot()
+    def _on_use_first_point(self):
+        """Récupère les coordonnées du premier point de la liste et les charge dans les champs."""
+        if self.controller.point_manager.points:
+            first_point = self.controller.point_manager.points[0]
+            self.absolute_target_widgets['X'].setValue(round(first_point.x))
+            self.absolute_target_widgets['Y'].setValue(round(first_point.y))
+            self.absolute_target_widgets['Z'].setValue(round(first_point.z))
+            self.absolute_target_widgets['THETA'].setValue(round(first_point.theta))
+            self.absolute_target_widgets['PHI'].setValue(round(first_point.phi))
+            self.controller.log_message_sent.emit("Coordonnées du premier point chargées dans la télécommande.")
+
+    @Slot()
+    def update_button_states(self):
+        """Met à jour l'état des boutons en fonction de l'état de l'application."""
+        has_points = bool(self.controller.point_manager.points)
+        if self.use_first_point_button:  # S'assurer que le bouton a bien été créé
+            self.use_first_point_button.setEnabled(has_points)
 
     @Slot(bool)
     def _on_keyboard_control_toggled(self, checked):
