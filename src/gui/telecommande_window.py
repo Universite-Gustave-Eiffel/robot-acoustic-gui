@@ -203,7 +203,7 @@ class TelecommandeWindow(QMainWindow):
         layout.addLayout(form_layout)
         control_layout = QVBoxLayout()
         control_layout.addStretch()
-        use_current_button = QPushButton("Utiliser Actuelle")
+        use_current_button = QPushButton(QIcon(ResourceManager.get_icon_path('refresh.png')), "Position Actuelle")
         use_current_button.setStatusTip("Copie la position actuelle de la capsule dans les champs de destination")
         go_button = QPushButton(QIcon(ResourceManager.get_icon_path('play.png')), "Aller à la position")
         self.use_first_point_button = QPushButton(QIcon(ResourceManager.get_icon_path('get_first_point.png')),"Utiliser 1er Point de la liste")
