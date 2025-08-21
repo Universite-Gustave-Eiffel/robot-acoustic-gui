@@ -336,24 +336,42 @@ class RobotController:
         self.update_positions()
 
     def set_parking(self):
-        self.logger.info("Mise à jour de la configuration de parking en mémoire avec la position actuelle.")
-        if not self.config.has_section('ROBOT_POSITIONS'): self.config.add_section('ROBOT_POSITIONS')
-        if not self.robot_pos: self.logger.warning(
-            "robot_pos est vide. Appelez update_positions() avant set_parking()."); return
-        for axis_name, position in self.robot_pos.items():
-            config_key = f"parking_{axis_name.lower()}"
-            self.config.set('ROBOT_POSITIONS', config_key, f"{position:.4f}")
+        self.logger.info("Mise à jour de la configuration de parking en mémoire avec la position CAPSULE actuelle.")
+        if not self.config.has_section('CAPSULE_POSITIONS'): self.config.add_section('CAPSULE_POSITIONS')
+
+        # --- MODIFICATION CLÉ ---
+        # On s'assure que les positions robot et capsule sont à jour
+        self.update_positions()
+        if not self.capsule_pos:
+            self.logger.warning("capsule_pos est vide. Impossible de définir le parking.")
+            return
+
+        # On enregistre les coordonnées CAPSULE, plus les angles qui sont communs
+        self.config.set('CAPSULE_POSITIONS', 'parking_x', f"{self.capsule_pos.get('X', 0.0):.4f}")
+        self.config.set('CAPSULE_POSITIONS', 'parking_y', f"{self.capsule_pos.get('Y', 0.0):.4f}")
+        self.config.set('CAPSULE_POSITIONS', 'parking_z', f"{self.capsule_pos.get('Z', 0.0):.4f}")
+        self.config.set('CAPSULE_POSITIONS', 'parking_theta', f"{self.robot_pos.get('THETA', 0.0):.4f}")
+        self.config.set('CAPSULE_POSITIONS', 'parking_phi', f"{self.robot_pos.get('PHI', 0.0):.4f}")
 
     def go_to_parking(self):
-        self.logger.info("Déplacement vers la position de parking...")
+        self.logger.info("Déplacement vers la position de parking (coordonnées capsule)...")
         try:
-            parking_coords = {'X': self.config.getfloat('ROBOT_POSITIONS', 'parking_x'),
-                              'Y': self.config.getfloat('ROBOT_POSITIONS', 'parking_y'),
-                              'Z': self.config.getfloat('ROBOT_POSITIONS', 'parking_z'),
-                              'THETA': self.config.getfloat('ROBOT_POSITIONS', 'parking_theta'),
-                              'PHI': self.config.getfloat('ROBOT_POSITIONS', 'parking_phi'), }
-            self.logger.info(f"Cible Parking: {parking_coords}")
-            self.move_to(**parking_coords)
+            # --- MODIFICATION CLÉ ---
+            # On lit les coordonnées capsule depuis le fichier de configuration
+            parking_capsule_coords = {
+                'X': self.config.getfloat('CAPSULE_POSITIONS', 'parking_x'),
+                'Y': self.config.getfloat('CAPSULE_POSITIONS', 'parking_y'),
+                'Z': self.config.getfloat('CAPSULE_POSITIONS', 'parking_z'),
+                'THETA': self.config.getfloat('CAPSULE_POSITIONS', 'parking_theta'),
+                'PHI': self.config.getfloat('CAPSULE_POSITIONS', 'parking_phi'),
+            }
+            self.logger.info(f"Cible Parking Capsule: {parking_capsule_coords}")
+
+            # On utilise la cinématique inverse pour trouver les coordonnées robot correspondantes
+            robot_target_coords = self.calculate_robot_coords_for_capsule(**parking_capsule_coords)
+            self.logger.info(f"Déplacement robot vers: {robot_target_coords}")
+            self.move_to(**robot_target_coords)
+
             self.logger.info("Position de parking atteinte.")
         except (configparser.NoSectionError, configparser.NoOptionError) as e:
             self.logger.error(f"Position de parking non définie ou incomplète. Erreur: {e}")
