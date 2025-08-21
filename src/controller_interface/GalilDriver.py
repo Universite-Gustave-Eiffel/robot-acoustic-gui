@@ -201,7 +201,8 @@ class RobotController:
     def _calculate_capsule_position(self):
         """
         Calcule la position de la capsule à partir de la position du robot.
-        Équations alignées sur l'ancien logiciel VB.NET.
+        Modèle cinématique final basé sur les schémas physiques, en conservant les noms de variables d'origine.
+        Formule : Capsule = Robot + Correction
         """
         x_r, y_r, z_r = self.robot_pos['X'], self.robot_pos['Y'], self.robot_pos['Z']
         theta_rad, phi_rad = math.radians(self.robot_pos['THETA']), math.radians(self.robot_pos['PHI'])
@@ -209,45 +210,54 @@ class RobotController:
         offsets = self.config['OFFSETS']
         corr_t_x = offsets.getfloat('correction_theta_x')
         corr_t_y = offsets.getfloat('correction_theta_y')
+        corr_t_z = offsets.getfloat('correction_theta_z', fallback=0.0)
         corr_p_l = offsets.getfloat('correction_phi_l')
 
-        ct, st = math.cos(theta_rad), math.sin(theta_rad)
-        cp, sp = math.cos(phi_rad), math.sin(phi_rad)
+        c_theta, s_theta = math.cos(theta_rad), math.sin(theta_rad)
+        c_phi, s_phi = math.cos(phi_rad), math.sin(phi_rad)
 
-        # Correction = (x_offset_theta) + (y_offset_phi)
-        correction_x = (corr_t_x * ct) - (corr_t_y * st) + (corr_p_l * cp * st)
-        correction_y = (corr_t_x * st) + (corr_t_y * ct) - (corr_p_l * cp * ct)
-        correction_z = -corr_p_l * sp
+        # Vecteur local avant rotation par Theta
+        x_local = corr_t_x + corr_p_l * math.sin(phi_rad)  # sin(phi) car phi=0 -> horizontal
+        y_local = corr_t_y
 
-        # CapsulePosition = RobotPosition + Correction
-        self.capsule_pos['X'] = x_r + correction_x
-        self.capsule_pos['Y'] = y_r + correction_y
-        self.capsule_pos['Z'] = z_r + correction_z
+        # Calcul du vecteur de correction total après rotation
+        corr_x = (x_local * c_theta) - (y_local * s_theta)
+        corr_y = (x_local * s_theta) + (y_local * c_theta)
+        corr_z = corr_t_z - (corr_p_l * math.cos(phi_rad))  # cos(phi) pour la composante Z
+
+        self.capsule_pos['X'] = x_r + corr_x
+        self.capsule_pos['Y'] = y_r + corr_y
+        self.capsule_pos['Z'] = z_r + corr_z
 
     def calculate_robot_coords_for_capsule(self, X, Y, Z, THETA, PHI):
         """
         Calcule les coordonnées robot nécessaires pour atteindre une cible capsule.
-        Équations alignées sur l'ancien logiciel VB.NET.
+        Modèle cinématique final basé sur les schémas physiques, en conservant les noms de variables d'origine.
+        Formule : Robot = Capsule - Correction
         """
         theta_rad, phi_rad = math.radians(THETA), math.radians(PHI)
 
         offsets = self.config['OFFSETS']
         corr_t_x = offsets.getfloat('correction_theta_x')
         corr_t_y = offsets.getfloat('correction_theta_y')
+        corr_t_z = offsets.getfloat('correction_theta_z', fallback=0.0)
         corr_p_l = offsets.getfloat('correction_phi_l')
 
-        ct, st = math.cos(theta_rad), math.sin(theta_rad)
-        cp, sp = math.cos(phi_rad), math.sin(phi_rad)
+        c_theta, s_theta = math.cos(theta_rad), math.sin(theta_rad)
+        c_phi, s_phi = math.cos(phi_rad), math.sin(phi_rad)
 
-        # Correction = (x_offset_theta) + (y_offset_phi)
-        correction_x = (corr_t_x * ct) - (corr_t_y * st) + (corr_p_l * cp * st)
-        correction_y = (corr_t_x * st) + (corr_t_y * ct) - (corr_p_l * cp * ct)
-        correction_z = -corr_p_l * sp
+        # Calcul du même vecteur de correction avec les angles cibles
+        x_local = corr_t_x + corr_p_l * math.sin(phi_rad)
+        y_local = corr_t_y
 
-        # RobotPosition = CapsulePosition - Correction
-        robot_x = X - correction_x
-        robot_y = Y - correction_y
-        robot_z = Z - correction_z
+        corr_x = (x_local * c_theta) - (y_local * s_theta)
+        corr_y = (x_local * s_theta) + (y_local * c_theta)
+        corr_z = corr_t_z - (corr_p_l * math.cos(phi_rad))
+
+        # Calcul inverse
+        robot_x = X - corr_x
+        robot_y = Y - corr_y
+        robot_z = Z - corr_z
 
         return {'X': robot_x, 'Y': robot_y, 'Z': robot_z, 'THETA': THETA, 'PHI': PHI}
 
