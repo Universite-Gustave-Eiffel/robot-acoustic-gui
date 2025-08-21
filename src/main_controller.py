@@ -386,7 +386,7 @@ class MainController(QObject):
             robot_coords = self.robot.calculate_robot_coords_for_capsule(**capsule_coords)
             self.robot.move_to(**robot_coords)
         self.log_message_sent.emit("Déplacement capsule terminé.")
-        self.robot_move_completed.emit(self.robot.last_positions)
+        self.robot_move_completed.emit(self.robot.robot_pos, self.robot.capsule_pos)
 
     @Slot(dict)
     def move_to_point_data(self, point_data: dict):
@@ -441,7 +441,7 @@ class MainController(QObject):
         with self.robot_lock:
             self.robot.go_to_parking()
         self.log_message_sent.emit("Position de parking atteinte.")
-        self.robot_move_completed.emit(self.robot.last_positions)
+        self.robot_move_completed.emit(self.robot.robot_pos, self.robot.capsule_pos)
 
     def set_robot_parking_position(self):
         if not self.robot or not self.config: return
@@ -464,7 +464,7 @@ class MainController(QObject):
                 robot_coords_for_zero = self.robot.calculate_robot_coords_for_capsule(**capsule_zero_coords)
                 self.robot.define_position(**robot_coords_for_zero)
                 self.robot.update_positions()
-                self.robot_move_completed.emit(self.robot.last_positions)
+                self.robot_move_completed.emit(self.robot.robot_pos, self.robot.capsule_pos)
                 self.log_message_sent.emit("Position actuelle définie comme Zéro Capsule.")
             except Exception as e:
                 self.log_message_sent.emit(f"Erreur lors de l'assignation de la position Zéro : {e}")
