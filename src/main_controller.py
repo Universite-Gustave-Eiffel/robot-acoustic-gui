@@ -355,18 +355,35 @@ class MainController(QObject):
 
     @Slot()
     def start_manual_measurement(self):
-        if not self.pulse: self.log_message_sent.emit("Impossible de mesurer : interface PULSE non prête."); return
-        if not self.pulse_lock.acquire(blocking=False): self.log_message_sent.emit("Interface PULSE occupée."); return
+        if not self.pulse:
+            self.log_message_sent.emit("Impossible de mesurer : interface PULSE non prête.")
+            return
+
+        if not self.pulse_lock.acquire(blocking=False):
+            self.log_message_sent.emit("Interface PULSE occupée.")
+            return
+
         try:
-            if self.pulse.is_measurement_active: self.log_message_sent.emit(
-                "Une mesure manuelle est déjà en cours."); return
-            if not self.pulse.is_template_ready_for_measurement and not self.pulse.autorange():
-                self.log_message_sent.emit("Échec de l'autorange.");
+            if self.pulse.is_measurement_active:
+                self.log_message_sent.emit("Une mesure est déjà en cours.")
                 return
-            self.pulse.start_measurement()
-            self.log_message_sent.emit("Mesure manuelle démarrée.")
+
+            self.log_message_sent.emit("Démarrage mesure manuelle...")
+            if not self.pulse.is_template_ready_for_measurement:
+                self.log_message_sent.emit("Autorange nécessaire...")
+                if not self.pulse.autorange():
+                    self.log_message_sent.emit("Échec de l'autorange.")
+                    return
+
+            if not self.pulse.start_measurement():
+                self.log_message_sent.emit("Erreur lors du démarrage de la mesure manuelle.")
+            else:
+                self.log_message_sent.emit("Mesure manuelle démarrée.")
+
         finally:
-            if self.pulse_lock.locked(): self.pulse_lock.release()
+            if self.pulse_lock.locked():
+                self.pulse_lock.release()
+
 
     @Slot(str)
     def save_manual_measurement(self, filename: str):

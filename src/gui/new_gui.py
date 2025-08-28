@@ -88,9 +88,9 @@ class IntegerDelegate(QStyledItemDelegate):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, controller: MainController) -> None:
         super().__init__()
-        self.controller = MainController()
+        self.controller = controller
         self.telecommande_window: Optional[TelecommandeWindow] = None
         self.robot_log_window: Optional[LogViewerWindow] = None
         self.pulse_log_window: Optional[LogViewerWindow] = None
@@ -422,6 +422,10 @@ class MainWindow(QMainWindow):
             QAbstractItemView.NoEditTriggers if running else QAbstractItemView.DoubleClicked
         )
 
+        self._actions['start_manual_measure'].setEnabled(not running)
+        self._actions['save_manual_measure'].setEnabled(not running)
+        self.manual_filename_edit.setEnabled(not running)
+
     @Slot(int)
     def highlight_table_row(self, row_index: int):
         self.points_table.blockSignals(True)
@@ -689,6 +693,13 @@ class MainWindow(QMainWindow):
             self.pulse_log_window.activateWindow()
             self.pulse_log_window.raise_()
 
+    @Slot()
+    def _test_manual_measure_clicked(self):
+        """Uniquement pour le débogage de la connexion du signal."""
+        message = "SIGNAL REÇU DANS MAINWINDOW !"
+        print(f"DEBUG GUI: {message}")
+        QMessageBox.information(self, "Test Signal", message)
+
 
 def run_application():
     """
@@ -752,8 +763,7 @@ def run_application():
 
     # --- DÉMARRAGE NORMAL ---
     splash.showMessage("Chargement de l'interface...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
-    fenetre = MainWindow()
-    fenetre.controller = controller
+    fenetre = MainWindow(controller=controller)
     fenetre.setup_controller_and_signals()
 
     fenetre.show()
