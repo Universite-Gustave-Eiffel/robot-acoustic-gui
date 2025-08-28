@@ -243,6 +243,7 @@ class MainWindow(QMainWindow):
 
         toolbar_sequence = QToolBar("Séquence")
         self.addToolBar(toolbar_sequence)
+        toolbar_sequence.addWidget(QLabel("Séquence : "))
         toolbar_sequence.addAction(self._actions['start_sequence'])
         toolbar_sequence.addAction(self._actions['pause_sequence'])
         toolbar_sequence.addAction(self._actions['next_point'])
@@ -251,6 +252,7 @@ class MainWindow(QMainWindow):
 
         toolbar_manual = QToolBar("Mesure Manuelle")
         self.addToolBar(toolbar_manual)
+        toolbar_manual.addWidget(QLabel("Pulse : "))
         toolbar_manual.addAction(self._actions['toggle_pulse'])
         toolbar_manual.addSeparator()
         toolbar_manual.addAction(self._actions['start_manual_measure'])
@@ -262,6 +264,7 @@ class MainWindow(QMainWindow):
 
         toolbar_monitoring = QToolBar("Monitoring")
         self.addToolBar(toolbar_monitoring)
+        toolbar_monitoring.addWidget(QLabel("Logs : "))
         toolbar_monitoring.addAction(self._actions['show_robot_log'])
         toolbar_monitoring.addAction(self._actions['show_pulse_log'])
         toolbar_monitoring.addSeparator()
