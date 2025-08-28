@@ -265,6 +265,12 @@ class PulseLabshopDriver:
             self._is_activating_template_flag = False
             logger.info("Template confirmé prêt pour la mesure.")
 
+            if not self.check_hardware_connection():
+                logger.critical(
+                    "Échec de la vérification matérielle. Le boîtier d'acquisition est probablement éteint ou non connecté.")
+                self._close_project_and_app(ask_save=False, app_already_set=True)
+                return False
+
             logger.info("Initialisation PULSE terminée avec succès.")
             return True
 
@@ -277,6 +283,49 @@ class PulseLabshopDriver:
         if hasattr(self, 'pulse_app') and self.pulse_app:
             self._close_project_and_app(ask_save=False, app_already_set=True)
         return False
+
+    def check_hardware_connection(self) -> bool:
+        """
+        Effectue un test fonctionnel rapide pour vérifier la connexion matérielle.
+        Lance une mesure et vérifie si elle démarre réellement.
+        """
+        if not self.pulse_app or not self.active_template or not self.is_template_ready_for_measurement:
+            logger.error("Vérification matérielle impossible : le driver n'est pas prêt.")
+            return False
+
+        logger.info("Début du test de connexion matérielle (cycle Start/Stop)...")
+        try:
+            # Réinitialiser les états
+            self.is_measurement_active = False
+
+            self.pulse_app.Start()
+
+            # Attendre un court instant que l'événement de démarrage arrive
+            timeout_start = 5  # 5 secondes max pour que la mesure démarre
+            start_time = time.time()
+            while not self.is_measurement_active and (time.time() - start_time) < timeout_start:
+                pythoncom.PumpWaitingMessages()
+                time.sleep(0.1)
+
+            # Arrêter immédiatement, peu importe le résultat
+            self.pulse_app.Stop()
+
+            if self.is_measurement_active:
+                logger.info("Test de connexion matérielle réussi : la mesure a démarré.")
+                # Attendre l'arrêt pour être propre
+                timeout_stop = 5
+                start_time = time.time()
+                while self.is_measurement_active and (time.time() - start_time) < timeout_stop:
+                    pythoncom.PumpWaitingMessages()
+                    time.sleep(0.1)
+                return True
+            else:
+                logger.critical("Test de connexion matérielle ÉCHOUÉ : la mesure n'a pas démarré.")
+                return False
+
+        except pythoncom.com_error as e:
+            logger.error(f"Erreur COM durant le test de connexion matérielle : {e}")
+            return False
 
     def _log_generator_settings_from_template_setup(self):
         if not self.active_template or not hasattr(self.active_template, "Setup"):

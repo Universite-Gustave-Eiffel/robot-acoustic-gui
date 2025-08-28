@@ -55,7 +55,8 @@ class MainController(QObject):
         self.robot_lock = threading.Lock()
         self.pulse_lock = threading.Lock()
 
-    def setup_robot(self):
+    def setup_robot(self) -> bool:
+        """Prépare l'objet RobotController à partir de la configuration. Ne se connecte pas."""
         try:
             self.config, self.robot_config_path = get_config('controller_interface')
             self.logger.info(f"Configuration robot chargée depuis : {self.robot_config_path}")
@@ -65,13 +66,15 @@ class MainController(QObject):
                 timeout=self.config.getfloat('SERIAL', 'timeout')
             )
             self.robot = RobotController(driver, self.config)
-            self.connect_robot()
+            return True
         except Exception as e:
             self.logger.critical(f"ERREUR CRITIQUE DÉMARRAGE ROBOT : {e}", exc_info=True)
             self.log_message_sent.emit(f"ERREUR CRITIQUE ROBOT : {e}")
             self.robot = None
+            return False
 
-    def setup_pulse(self):
+    def setup_pulse(self) -> bool:
+        """Prépare et initialise l'interface PULSE. Retourne True en cas de succès."""
         try:
             pulse_config_obj, _ = get_config('labshop_interface')
             self.pulse_config = pulse_config_obj
@@ -82,13 +85,16 @@ class MainController(QObject):
             )
             if self.pulse.initialize_pulse():
                 self.log_message_sent.emit("Interface PULSE LabShop initialisée avec succès.")
+                return True
             else:
-                self.log_message_sent.emit("AVERTISSEMENT: Échec de l'initialisation de PULSE.")
+                self.log_message_sent.emit("AVERTISSEMENT: Échec de l'initialisation de PULSE. Vérifiez la connexion du boîtier d'acquisition.")
                 self.pulse = None
+                return False
         except Exception as e:
             self.logger.critical(f"ERREUR CRITIQUE DÉMARRAGE PULSE : {e}", exc_info=True)
             self.log_message_sent.emit(f"ERREUR CRITIQUE PULSE : {e}")
             self.pulse = None
+            return False
 
     @property
     def is_modified(self):
@@ -119,14 +125,16 @@ class MainController(QObject):
                     self.robot_lock.release()
 
     def connect_robot(self):
-        if not self.robot: return
+        if not self.robot: return False
         if self.robot.connect():
             self.log_message_sent.emit("Robot connecté avec succès.")
             self.robot.enable_motors()
             self.log_message_sent.emit("Moteurs du robot activés.")
             if self.position_timer: self.position_timer.start()
+            return True
         else:
-            self.log_message_sent.emit("ERREUR: Impossible de se connecter au robot.")
+            self.log_message_sent.emit(f"ERREUR: Impossible de se connecter au robot sur le port {self.config.get('SERIAL', 'port')}.")
+            return False
 
     def disconnect_robot(self):
         if self.sequence_thread and self.sequence_thread.isRunning():

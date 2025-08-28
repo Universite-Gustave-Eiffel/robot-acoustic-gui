@@ -104,18 +104,7 @@ class MainWindow(QMainWindow):
 
         self._setup_ui()
 
-    def setup_controller_and_signals(self, splash: QSplashScreen):
-        splash.showMessage("Initialisation du contrôleur Robot...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
-        QCoreApplication.processEvents()
-        self.controller.setup_robot()
-        time.sleep(0.5)
-
-        splash.showMessage("Initialisation de l'interface PULSE Labshop...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
-        QCoreApplication.processEvents()
-        self.controller.setup_pulse()
-        time.sleep(0.5)
-
-        splash.showMessage("Connexions finales...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+    def setup_controller_and_signals(self):
         self.controller.log_message_sent.connect(self.update_status_bar)
         self.controller.point_list_changed.connect(self.update_points_table)
         self.controller.document_modified_status_changed.connect(self.update_save_action_state)
@@ -701,15 +690,79 @@ class MainWindow(QMainWindow):
             self.pulse_log_window.raise_()
 
 
-if __name__ == '__main__':
-    setup_logging()
+def run_application():
+    """
+    Fonction principale qui gère le cycle de vie de l'application,
+    y compris les vérifications de démarrage.
+    """
     app = QApplication(sys.argv)
+
+    controller = MainController()
+
     pixmap = ResourceManager.get_pixmap('splash.png')
     splash = QSplashScreen(pixmap)
     splash.show()
     app.processEvents()
+
+    # --- VÉRIFICATION DU ROBOT ---
+    splash.showMessage("Chargement de la configuration Robot...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+    if not controller.setup_robot():
+        splash.finish(None)
+        QMessageBox.critical(None, "Erreur Critique Robot",
+                             "Impossible de lire le fichier de configuration du robot (config.ini).\n"
+                             "L'application ne peut pas démarrer.")
+        return -1
+
+    splash.showMessage("Connexion au contrôleur Robot...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+    if not controller.connect_robot():
+        splash.finish(None)
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.Critical)
+        msg_box.setWindowTitle("Erreur de Connexion Robot")
+        msg_box.setText(f"Impossible de communiquer avec le robot Galil.\n\n"
+                        f"Causes possibles :\n"
+                        f"- Le robot est éteint ou non connecté.\n"
+                        f"- Le port COM sélectionné dans la configuration est incorrect.")
+
+        config_button = msg_box.addButton("Ouvrir la Configuration", QMessageBox.AcceptRole)
+        msg_box.addButton("Quitter", QMessageBox.RejectRole)
+
+        msg_box.exec()
+
+        if msg_box.clickedButton() == config_button:
+            config_dialog = ConfigWindow(controller, None)
+            config_dialog.exec()
+            QMessageBox.information(None, "Redémarrage requis",
+                                    "La configuration a été modifiée.\nVeuillez redémarrer l'application.")
+
+        return -1
+
+    # --- VÉRIFICATION DE PULSE ---
+    splash.showMessage("Initialisation de l'interface PULSE Labshop...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+    if not controller.setup_pulse():
+        splash.finish(None)
+        QMessageBox.critical(None, "Erreur d'Initialisation PULSE",
+                             "Impossible d'initialiser PULSE LabShop ou de détecter le boîtier d'acquisition (LAN-XI).\n\n"
+                             "Causes possibles :\n"
+                             "- PULSE LabShop n'est pas installé.\n"
+                             "- Le boîtier d'acquisition est éteint ou non connecté au réseau.\n"
+                             "- Problème de configuration réseau.\n"
+                             "- La clé d'activation de PULSE est manquante ou invalide.\n\n")
+        return -1
+
+    # --- DÉMARRAGE NORMAL ---
+    splash.showMessage("Chargement de l'interface...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
     fenetre = MainWindow()
-    fenetre.setup_controller_and_signals(splash)
+    fenetre.controller = controller
+    fenetre.setup_controller_and_signals()
+
     fenetre.show()
     splash.finish(fenetre)
-    sys.exit(app.exec())
+
+    return app.exec()
+
+
+if __name__ == '__main__':
+    setup_logging()
+    exit_code = run_application()
+    sys.exit(exit_code)
