@@ -1,4 +1,3 @@
-# PulseLabshopDriver.py (V20 - Bibliothèque Finale)
 import comtypes.client
 import comtypes.gen._98BA4851_F724_11CE_9645_0020AF34D7AC_0_1_0 as PulseTLB
 import pythoncom
@@ -38,7 +37,6 @@ logger = logging.getLogger("RobotApp.PulseDriver")
 
 
 class PulseTemplateEvents:
-    # ... (Identique à la version précédente) ...
     def __init__(self, driver_instance):
         self.driver = driver_instance
         logger.debug("PulseTemplateEvents sink instancié.")
@@ -142,7 +140,6 @@ class PulseLabshopDriver:
         logger.info("PulseLabshopDriver instancié.")
 
     def _event_pump_loop(self):
-        # ... (Identique)
         pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
         logger.debug("Thread de pompage des événements COM dédié démarré.")
         try:
@@ -156,7 +153,6 @@ class PulseLabshopDriver:
             pythoncom.CoUninitialize()
 
     def initialize_pulse(self):
-        # ... (Identique à la V19, mais sans les appels à _log_hardware_details) ...
         logger.info(f"Initialisation de PULSE LabShop avec projet: {self.project_path_to_load}")
         self.is_template_ready_for_measurement = False
         try:
@@ -283,7 +279,6 @@ class PulseLabshopDriver:
         return False
 
     def _log_generator_settings_from_template_setup(self):
-        # ... (Identique à V19) ...
         if not self.active_template or not hasattr(self.active_template, "Setup"):
             logger.debug("Impossible de logger les paramètres du générateur: template ou setup non accessible.")
             return
@@ -334,7 +329,6 @@ class PulseLabshopDriver:
         logger.info("--- Fin Vérification Paramètres Générateur ---")
 
     def autorange(self):
-        # ... (Identique à V17) ...
         if not self.pulse_app or not self.active_template:
             logger.error("Impossible Autorange: PULSE non initialisé ou template non actif.")
             return False
@@ -378,7 +372,6 @@ class PulseLabshopDriver:
             return False
 
     def start_measurement(self):
-        # ... (Identique à V17) ...
         if not self.pulse_app or not self.active_template:
             logger.error("Impossible de démarrer : PULSE non initialisé ou template non actif.")
             return False
@@ -399,7 +392,6 @@ class PulseLabshopDriver:
             return False
 
     def stop_measurement(self):
-        # ... (Identique à V17) ...
         if not self.pulse_app:
             logger.warning("PULSE non initialisé, impossible d'arrêter.")
             return False
@@ -416,7 +408,6 @@ class PulseLabshopDriver:
             return False
 
     def save_function_group_ascii(self, filename_suffix):
-        # ... (Identique à V17) ...
         if not self.function_group_to_save:
             logger.error(
                 f"Impossible de sauvegarder (ASCII) : FunctionGroup '{self.function_group_name_to_save_param}' non défini ou non trouvé.")
@@ -456,7 +447,6 @@ class PulseLabshopDriver:
             return False
 
     def _close_project_and_app(self, ask_save=False, app_already_set=True):
-        # ... (Identique à V17) ...
         if self.event_thread and self.event_thread.is_alive():
             logger.debug("Arrêt du thread de pompage des événements dédié (depuis _close_project_and_app)...")
             self.event_thread_running = False
@@ -498,7 +488,6 @@ class PulseLabshopDriver:
             logger.debug("Référence à pulse_app (current_pulse_app_ref) traitée.")
 
     def _release_com_objects(self):
-        # ... (Identique à V17) ...
         logger.debug("Libération des objets COM internes du driver...")
         if self.event_connection:
             try:
@@ -519,13 +508,11 @@ class PulseLabshopDriver:
         logger.debug("Garbage collection.")
 
     def close(self):
-        # ... (Identique à V17) ...
         logger.info("Fermeture de la connexion à PULSE LabShop...")
         self._close_project_and_app(ask_save=False, app_already_set=bool(self.pulse_app))
         logger.info("Fermeture du driver PulseLabshop terminée.")
 
     def kill_pulse_processes(self):
-        # ... (Identique à V17) ...
         logger.warning("Tentative de terminer les processus PULSE.exe...")
         try:
             result = os.system('taskkill /F /IM Pulse.exe /T > nul 2>&1')
@@ -541,26 +528,16 @@ class PulseLabshopDriver:
             return False
 
 
-# Ce bloc __main__ sera déplacé vers un fichier main.py séparé pour l'intégration finale.
 if __name__ == '__main__':
-    # Configuration du Logging pour le test
     log_format = '%(asctime)s - [%(levelname)s] (%(threadName)s) %(name)s: %(message)s'
 
-    # Handler console (pour voir les messages INFO et supérieurs)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(logging.Formatter(log_format))
 
-    # Le logger racine est configuré pour le niveau le plus bas (DEBUG)
-    # pour que les handlers puissent filtrer ce qu'ils veulent montrer.
     logging.basicConfig(level=logging.DEBUG, handlers=[console_handler])
 
-    # Rendre les loggers comtypes silencieux sur la console
     logging.getLogger('comtypes').setLevel(logging.WARNING)
-
-    # Le logger de notre application est déjà créé par getLogger("RobotApp.PulseDriver")
-    # Il héritera du niveau du logger racine (DEBUG) et enverra tout à la console (qui filtrera à INFO).
-    # Le FileHandler ajouté dans __init__ loggera tout à partir de DEBUG.
 
     try:
         pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED)
