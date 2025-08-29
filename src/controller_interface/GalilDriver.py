@@ -1,5 +1,3 @@
-# src/controller_interface/GalilDriver.py
-
 import serial
 import time
 import logging
@@ -247,12 +245,12 @@ class RobotController:
         c_phi, s_phi = math.cos(phi_rad), math.sin(phi_rad)
 
         # Calcul du même vecteur de correction avec les angles cibles
-        x_local = corr_t_x + corr_p_l * math.sin(phi_rad)
+        x_local = corr_t_x + corr_p_l * s_phi
         y_local = corr_t_y
 
         corr_x = (x_local * c_theta) - (y_local * s_theta)
         corr_y = (x_local * s_theta) + (y_local * c_theta)
-        corr_z = corr_t_z - (corr_p_l * math.cos(phi_rad))
+        corr_z = corr_t_z - (corr_p_l * c_phi)
 
         # Calcul inverse
         robot_x = X - corr_x
@@ -349,14 +347,11 @@ class RobotController:
         self.logger.info("Mise à jour de la configuration de parking en mémoire avec la position CAPSULE actuelle.")
         if not self.config.has_section('CAPSULE_POSITIONS'): self.config.add_section('CAPSULE_POSITIONS')
 
-        # --- MODIFICATION CLÉ ---
-        # On s'assure que les positions robot et capsule sont à jour
         self.update_positions()
         if not self.capsule_pos:
             self.logger.warning("capsule_pos est vide. Impossible de définir le parking.")
             return
 
-        # On enregistre les coordonnées CAPSULE, plus les angles qui sont communs
         self.config.set('CAPSULE_POSITIONS', 'parking_x', f"{self.capsule_pos.get('X', 0.0):.4f}")
         self.config.set('CAPSULE_POSITIONS', 'parking_y', f"{self.capsule_pos.get('Y', 0.0):.4f}")
         self.config.set('CAPSULE_POSITIONS', 'parking_z', f"{self.capsule_pos.get('Z', 0.0):.4f}")
@@ -366,8 +361,6 @@ class RobotController:
     def go_to_parking(self):
         self.logger.info("Déplacement vers la position de parking (coordonnées capsule)...")
         try:
-            # --- MODIFICATION CLÉ ---
-            # On lit les coordonnées capsule depuis le fichier de configuration
             parking_capsule_coords = {
                 'X': self.config.getfloat('CAPSULE_POSITIONS', 'parking_x'),
                 'Y': self.config.getfloat('CAPSULE_POSITIONS', 'parking_y'),

@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import sys
 import logging
 import logging.handlers
@@ -291,7 +288,7 @@ class MainWindow(QMainWindow):
     def _create_statusbar(self) -> None:
         status_bar = self.statusBar()
         self.status_message_label = QLabel("Prêt")
-        status_bar.addWidget(self.status_message_label, 1)  # Le '1' donne l'espace extensible
+        status_bar.addWidget(self.status_message_label, 1)
 
         coord_widget = QWidget()
         coord_layout = QHBoxLayout(coord_widget)
@@ -462,23 +459,15 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
 
-        # --- MODIFICATION DE LA SÉQUENCE DE FERMETURE ---
 
-        # 1. Accepter l'événement de fermeture pour que Qt sache que la fenêtre va se fermer.
         event.accept()
-
-        # 2. Cacher la fenêtre explicitement. Cela retire l'interface de l'écran.
         self.hide()
-
-        # 3. Fermer les fenêtres enfants qui pourraient dépendre du contrôleur.
         if self.telecommande_window:
             self.telecommande_window.close()
         if self.robot_log_window:
             self.robot_log_window.close()
         if self.pulse_log_window:
             self.pulse_log_window.close()
-
-        # 4. Maintenant, faire le nettoyage lourd (déconnexion matériel).
         self.controller.disconnect_robot()
 
     @Slot()

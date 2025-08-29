@@ -312,7 +312,6 @@ class PulseLabshopDriver:
 
             if self.is_measurement_active:
                 logger.info("Test de connexion matérielle réussi : la mesure a démarré.")
-                # Attendre l'arrêt pour être propre
                 timeout_stop = 5
                 start_time = time.time()
                 while self.is_measurement_active and (time.time() - start_time) < timeout_stop:

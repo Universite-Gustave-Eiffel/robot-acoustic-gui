@@ -1,5 +1,3 @@
-# src/main_controller.py
-
 import logging
 import configparser
 import threading
@@ -25,10 +23,8 @@ def get_config(interface_name: str):
 
 class MainController(QObject):
     log_message_sent = Signal(str)
-    # --- MODIFICATION DU SIGNAL ---
     # Émet les coordonnées robot ET les coordonnées capsule
     robot_position_updated = Signal(dict, dict)
-    # ---------------------------
     robot_move_completed = Signal(dict,dict)
     point_list_changed = Signal(list)
     document_modified_status_changed = Signal(bool)
@@ -119,7 +115,6 @@ class MainController(QObject):
                     robot_pos = self.robot.update_positions()
                     if robot_pos:
                         capsule_pos = self.robot.capsule_pos
-                        # --- MODIFICATION DE L'ÉMISSION DU SIGNAL ---
                         self.robot_position_updated.emit(robot_pos, capsule_pos)
                 finally:
                     self.robot_lock.release()

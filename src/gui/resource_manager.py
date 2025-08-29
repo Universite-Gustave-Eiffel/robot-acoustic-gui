@@ -1,5 +1,3 @@
-# src/gui/resource_manager.py
-
 from pathlib import Path
 from PySide6.QtGui import QPixmap, QIcon
 

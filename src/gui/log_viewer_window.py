@@ -1,5 +1,3 @@
-# src/gui/log_viewer_window.py
-
 import os
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QCheckBox, QHBoxLayout, QWidget
 from PySide6.QtCore import Slot, QFileSystemWatcher, Qt
@@ -21,12 +19,8 @@ class LogViewerWindow(QDialog):
         self.setGeometry(250, 250, 800, 600)
 
         self.file_path = file_path
-
-        # --- NOUVEAU : Stockage en mémoire de toutes les lignes ---
         self.all_lines = []
         self.last_pos = 0
-
-        # --- NOUVEAU : Filtres ---
         filter_widget = QWidget(self)
         filter_layout = QHBoxLayout(filter_widget)
         filter_layout.setContentsMargins(0, 0, 0, 0)

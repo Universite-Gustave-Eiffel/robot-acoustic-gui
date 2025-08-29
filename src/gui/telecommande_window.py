@@ -1,5 +1,3 @@
-# src/gui/telecommande_window.py
-
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QLabel, QVBoxLayout, QGridLayout, QFrame,
     QLineEdit, QSpinBox, QPushButton, QFormLayout, QGroupBox, QHBoxLayout,

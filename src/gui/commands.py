@@ -1,5 +1,3 @@
-# src/gui/commands.py
-
 from PySide6.QtGui import QUndoCommand
 from src.main_controller import MainController
 
@@ -75,17 +73,14 @@ class MovePointCommand(PointListCommand):
     def redo(self):
         if self.direction == "haut":
             self.controller.point_manager.move_point_up(self.index)
-        else:  # bas
+        else:
             self.controller.point_manager.move_point_down(self.index)
         self.refresh_ui()
 
     def undo(self):
-        # On fait simplement le mouvement inverse
         if self.direction == "haut":
-            # Le point est maintenant à l'index - 1, on le redescend
             self.controller.point_manager.move_point_down(self.index - 1)
-        else:  # bas
-            # Le point est maintenant à l'index + 1, on le remonte
+        else:
             self.controller.point_manager.move_point_up(self.index + 1)
         self.refresh_ui()
 
@@ -99,7 +94,6 @@ class ChangeCellCommand(PointListCommand):
         self.new_value = new_value
 
     def redo(self):
-        # On met à jour directement le modèle de données
         header = self.controller.get_point_headers()[self.col]
         point = self.controller.point_manager.points[self.row]
 
@@ -113,7 +107,6 @@ class ChangeCellCommand(PointListCommand):
                 value = self.new_value
             setattr(point, header, value)
         except (ValueError, TypeError):
-            # En cas d'erreur de conversion, on annule la modification
             setattr(point, header, self.old_value)
 
         self.refresh_ui()
