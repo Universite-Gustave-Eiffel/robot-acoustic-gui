@@ -447,17 +447,34 @@ class MainWindow(QMainWindow):
 
         self.controller.sync_points_from_gui(self._get_table_data())
 
+        should_close = True
         if not self.undo_stack.isClean():
             reply = QMessageBox.question(self, "Quitter",
                                          "Des modifications n'ont pas été sauvegardées.\nVoulez-vous les enregistrer avant de quitter ?",
                                          QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
+
             if reply == QMessageBox.StandardButton.Save:
                 if not self._on_save_triggered():
-                    event.ignore()
-                    return
+                    should_close = False
             elif reply == QMessageBox.StandardButton.Cancel:
-                event.ignore()
-                return
+                should_close = False
+
+        if not should_close:
+            event.ignore()
+            return
+        try:
+            self.undo_stack.cleanChanged.disconnect()
+        except RuntimeError:
+            pass
+        self.hide()
+        if self.telecommande_window:
+            self.telecommande_window.close()
+        if self.robot_log_window:
+            self.robot_log_window.close()
+        if self.pulse_log_window:
+            self.pulse_log_window.close()
+        self.controller.disconnect_robot()
+        event.accept()
 
 
         event.accept()
