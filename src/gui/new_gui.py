@@ -712,6 +712,11 @@ def run_application():
     Fonction principale qui gère le cycle de vie de l'application,
     y compris les vérifications de démarrage.
     """
+    import sys
+    from pathlib import Path
+    from PySide6.QtWidgets import QApplication, QSplashScreen, QMessageBox, QFileDialog
+    from PySide6.QtCore import Qt
+
     app = QApplication(sys.argv)
 
     controller = MainController()
@@ -736,14 +741,14 @@ def run_application():
         msg_box = QMessageBox()
         msg_box.setIcon(QMessageBox.Critical)
         msg_box.setWindowTitle("Erreur de Connexion Robot")
-        msg_box.setText(f"Impossible de communiquer avec le robot Galil.\n\n"
-                        f"Causes possibles :\n"
-                        f"- Le robot est éteint ou non connecté.\n"
-                        f"- Le port COM sélectionné dans la configuration est incorrect.")
-
+        msg_box.setText(
+            "Impossible de communiquer avec le robot Galil.\n\n"
+            "Causes possibles :\n"
+            "- Le robot est éteint ou non connecté.\n"
+            "- Le port COM sélectionné dans la configuration est incorrect."
+        )
         config_button = msg_box.addButton("Ouvrir la Configuration", QMessageBox.AcceptRole)
         msg_box.addButton("Quitter", QMessageBox.RejectRole)
-
         msg_box.exec()
 
         if msg_box.clickedButton() == config_button:
@@ -751,26 +756,65 @@ def run_application():
             config_dialog.exec()
             QMessageBox.information(None, "Redémarrage requis",
                                     "La configuration a été modifiée.\nVeuillez redémarrer l'application.")
-
         return -1
 
-    # --- VÉRIFICATION DE PULSE ---
+    # --- VÉRIFICATION / INITIALISATION DE PULSE ---
     splash.showMessage("Initialisation de l'interface PULSE Labshop...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
-    if not controller.setup_pulse():
-        splash.finish(None)
-        QMessageBox.critical(None, "Erreur d'Initialisation PULSE",
-                             "Impossible d'initialiser PULSE LabShop ou de détecter le boîtier d'acquisition (LAN-XI).\n\n"
-                             "Causes possibles :\n"
-                             "- PULSE LabShop n'est pas installé.\n"
-                             "- Le boîtier d'acquisition est éteint ou non connecté au réseau.\n"
-                             "- Problème de configuration réseau.\n"
-                             "- La clé d'activation de PULSE est manquante ou invalide.\n\n")
-        return -1
+    ok, err, tried_proj = controller.setup_pulse()
+
+    if not ok:
+        # Cas spécifique : projet .pls introuvable → proposer un choix (jamais "sans PULSE")
+        if err and "Projet PULSE introuvable" in err:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Warning)
+            msg.setWindowTitle("Projet PULSE introuvable")
+            msg.setText(
+                f"{err}\n\n"
+                "Souhaitez-vous sélectionner un fichier .pls existant "
+                "ou utiliser le projet vierge embarqué ?"
+            )
+            btn_sel = msg.addButton("Choisir un .pls…", QMessageBox.AcceptRole)
+            btn_vierge = msg.addButton("Projet vierge", QMessageBox.ActionRole)
+            msg.exec()
+
+            if msg.clickedButton() is btn_sel:
+                pls, _ = QFileDialog.getOpenFileName(
+                    None, "Sélectionner un projet PULSE",
+                    str(Path.home()), "Projets PULSE (*.pls)"
+                )
+                if not pls:
+                    splash.finish(None)
+                    QMessageBox.information(None, "PULSE", "Aucun projet sélectionné. Fermeture.")
+                    return -1
+                # Met à jour la config en mémoire puis retente
+                controller.pulse_config.set('PulseSettings', 'project_path', pls)
+
+            # "Projet vierge" → on garde la valeur par défaut du INI (MinimalTest.pls résolu côté contrôleur)
+
+            ok, err, _ = controller.setup_pulse()
+
+        # Autres échecs (COM/LabShop/boîtier/licence, etc.)
+        if not ok:
+            splash.finish(None)
+            QMessageBox.critical(
+                None, "Erreur d'Initialisation PULSE",
+                f"{err or 'Impossible d’initialiser PULSE LabShop.'}\n\n"
+                "Causes possibles :\n"
+                "- PULSE LabShop n'est pas installé ou la licence est absente.\n"
+                "- Le boîtier d'acquisition est éteint ou non connecté au réseau.\n"
+                "- Problème de configuration réseau."
+            )
+            return -1
 
     # --- DÉMARRAGE NORMAL ---
     splash.showMessage("Chargement de l'interface...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
     fenetre = MainWindow(controller=controller)
     fenetre.setup_controller_and_signals()
+    # Optionnel : si certains modules s'attendent à controller.gui
+    try:
+        controller.gui = fenetre
+    except Exception:
+        pass
 
     fenetre.show()
     splash.finish(fenetre)

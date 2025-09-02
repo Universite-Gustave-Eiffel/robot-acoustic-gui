@@ -13,12 +13,53 @@ from src.sequence_manager.sequence_manager import SequenceManager
 
 
 def get_config(interface_name: str):
-    controller_file_path = Path(__file__).resolve()
-    config_path = controller_file_path.parent / interface_name / 'config.ini'
+    import sys, configparser
+    from pathlib import Path
+
     config = configparser.ConfigParser()
-    if not config.read(config_path, encoding='utf-8'):
-        raise FileNotFoundError(f"Fichier de configuration introuvable à {config_path}")
-    return config, str(config_path)
+
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        base = Path(sys._MEIPASS)
+    else:
+        base = Path(__file__).resolve().parent
+
+    candidates = [
+        base / interface_name / 'config.ini',
+        base / '_internal' / interface_name / 'config.ini',
+        Path.cwd() / interface_name / 'config.ini'
+    ]
+
+    for p in candidates:
+        if p.is_file():
+            if config.read(p, encoding='utf-8'):
+                return config, str(p)
+
+    raise FileNotFoundError(
+        "Fichier de configuration introuvable.\n"
+        + "\n".join(f"- {c}" for c in candidates)
+    )
+
+def _resolve_from_config(raw_path: str, cfg_path: str, interface_name: str | None = None) -> str:
+    """
+    Résout 'raw_path' en absolu.
+    - Si 'raw_path' est absolu: renvoie tel quel.
+    - Sinon:
+        * si 'raw_path' commence par 'interface_name' (ex: 'labshop_interface\\...'),
+          on le résout par rapport au dossier parent du dossier du INI (ex: '.../src'),
+        * sinon on le résout par rapport au dossier du INI.
+    """
+    p = Path(raw_path)
+    if p.is_absolute():
+        return str(p)
+
+    ini_dir = Path(cfg_path).resolve().parent
+    first = (p.parts[0].lower() if p.parts else "")
+    if interface_name and first == interface_name.lower():
+        base = ini_dir.parent             # ex: .../src
+    else:
+        base = ini_dir                    # ex: .../src/labshop_interface
+
+    return str((base / p).resolve())
 
 
 class MainController(QObject):
@@ -69,28 +110,50 @@ class MainController(QObject):
             self.robot = None
             return False
 
-    def setup_pulse(self) -> bool:
-        """Prépare et initialise l'interface PULSE. Retourne True en cas de succès."""
+    def setup_pulse(self) -> tuple[bool, str | None, str | None]:
+        """
+        Prépare et initialise l'interface PULSE.
+        Retourne (ok, erreur, proj_abs) :
+          - ok : True si PULSE initialisé, False sinon
+          - erreur : message d’erreur (ou None si ok)
+          - proj_abs : chemin absolu du projet .pls réellement utilisé (ou None en cas d’échec)
+        """
         try:
-            pulse_config_obj, _ = get_config('labshop_interface')
+            pulse_config_obj, cfg_path = get_config('labshop_interface')
             self.pulse_config = pulse_config_obj
+
+            raw_proj = self.pulse_config.get('PulseSettings', 'project_path',
+                                             fallback='labshop_interface\\pulse_projects\\MinimalTest.pls')
+            raw_save = self.pulse_config.get('PulseSettings', 'save_path_dir',
+                                             fallback='labshop_interface\\mesures_pulse_ascii')
+            fg_name = self.pulse_config.get('PulseSettings', 'function_group_to_save', fallback='ASauver')
+
+            proj_abs = _resolve_from_config(raw_proj, cfg_path, interface_name='labshop_interface')
+            save_abs = _resolve_from_config(raw_save, cfg_path, interface_name='labshop_interface')
+
+            from pathlib import Path
+            if not Path(proj_abs).exists():
+                self.pulse = None
+                return False, f"Projet PULSE introuvable : {proj_abs}", proj_abs
+
+            # Instancier le driver avec ta signature actuelle
             self.pulse = PulseLabshopDriver(
-                project_path=self.pulse_config.get('PulseSettings', 'project_path'),
-                save_path_dir=self.pulse_config.get('PulseSettings', 'save_path_dir'),
-                function_group_name_to_save=self.pulse_config.get('PulseSettings', 'function_group_to_save')
+                project_path=proj_abs,
+                save_path_dir=save_abs,
+                function_group_name_to_save=fg_name
             )
+
             if self.pulse.initialize_pulse():
                 self.log_message_sent.emit("Interface PULSE LabShop initialisée avec succès.")
-                return True
+                return True, None, proj_abs
             else:
-                self.log_message_sent.emit("AVERTISSEMENT: Échec de l'initialisation de PULSE. Vérifiez la connexion du boîtier d'acquisition.")
                 self.pulse = None
-                return False
+                return False, "Échec de l'initialisation de PULSE (COM/LabShop/boîtier).", proj_abs
+
         except Exception as e:
             self.logger.critical(f"ERREUR CRITIQUE DÉMARRAGE PULSE : {e}", exc_info=True)
-            self.log_message_sent.emit(f"ERREUR CRITIQUE PULSE : {e}")
             self.pulse = None
-            return False
+            return False, str(e), None
 
     @property
     def is_modified(self):
