@@ -78,7 +78,7 @@ class ConfigWindow(QDialog):
         serial_layout.addRow("Timeout (s):", self.robot_timeout)
         layout.addWidget(serial_group)
 
-        movement_group = QGroupBox("Mouvement et Parking")
+        movement_group = QGroupBox("Parking")
         movement_layout = QFormLayout(movement_group)
         self.parking_x = QLineEdit()
         self.parking_y = QLineEdit()

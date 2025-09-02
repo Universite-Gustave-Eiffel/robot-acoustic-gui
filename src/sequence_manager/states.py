@@ -26,15 +26,77 @@ class StateStartMove(State):
         point_index = context['current_index']
         point = context['points'][point_index]
         robot_lock = context['robot_lock']
+        self.logger.info(f"[DEBUG] sequence_params dans le contexte = {context.get('sequence_params')}")
 
+        # Cible capsule (comme avant)
+        capsule_target = {'X': point.x, 'Y': point.y, 'Z': point.z,
+                          'THETA': point.theta, 'PHI': point.phi}
+
+        # Paramètres de séquence (issus de la fenêtre Config)
+        params = context.get('sequence_params', {}) or {}
+        safety_on = bool(params.get('activer_securite_deplacement', False))
+        z_safe = float(params.get('hauteur_securite_deplacement_z', 0.0))
+
+        # On nettoie d'éventuels restes d'une séquence précédente
+        context.pop('_safety_seq', None)
+
+        if safety_on and z_safe > 0:
+            # Position capsule actuelle (si dispo ; fallback neutre sinon)
+            try:
+                if hasattr(self.robot, "update_positions"):
+                    self.robot.update_positions()
+                cur_caps = (self.robot.capsule_pos or {}).copy()
+            except Exception:
+                cur_caps = {'X': 0.0, 'Y': 0.0, 'Z': 0.0, 'THETA': 0.0, 'PHI': 0.0}
+
+            cur_caps = {
+                'X': cur_caps.get('X', capsule_target['X']),
+                'Y': cur_caps.get('Y', capsule_target['Y']),
+                'Z': cur_caps.get('Z', capsule_target['Z']),
+                'THETA': cur_caps.get('THETA', capsule_target['THETA']),
+                'PHI': cur_caps.get('PHI', capsule_target['PHI']),
+            }
+
+            # Construit les segments capsule (seulement ceux utiles)
+            seg_caps = []
+
+            # 1) montée à Zsécurité si on est en dessous
+            if cur_caps.get('Z', 0.0) < z_safe:
+                up = cur_caps.copy()
+                up['Z'] = z_safe
+                seg_caps.append(up)
+
+            # 2) translation XY/angles vers la cible à Zsécurité
+            seg_caps.append({
+                'X': capsule_target['X'], 'Y': capsule_target['Y'], 'Z': z_safe,
+                'THETA': capsule_target['THETA'], 'PHI': capsule_target['PHI'],
+            })
+
+            # 3) descente au Z cible si différent
+            if capsule_target['Z'] != z_safe:
+                seg_caps.append(capsule_target)
+
+            # Convertit chaque segment en coordonnées robot et les stocke dans le contexte
+            context['_safety_seq'] = [
+                self.robot.calculate_robot_coords_for_capsule(**c) for c in seg_caps
+            ]
+
+            # Démarre le premier segment
+            first_robot = context['_safety_seq'].pop(0)
+            self.logger.info(f"Trajectoire sécurisée (Z={z_safe} mm) — 1/{1 + len(context['_safety_seq'])} segment(s).")
+            with robot_lock:
+                self.robot.start_move_to(**first_robot)
+
+            return StateWaitForMove, context
+
+        # ---- CAS NORMAL (inchangé) : déplacement direct en un segment ----
         self.logger.info(f"Calcul des coordonnées robot pour le point capsule {point_index + 1}")
-        capsule_target_coords = {'X': point.x, 'Y': point.y, 'Z': point.z, 'THETA': point.theta, 'PHI': point.phi}
-        robot_target_coords = self.robot.calculate_robot_coords_for_capsule(**capsule_target_coords)
-        self.logger.info(f"Coordonnées robot calculées : {robot_target_coords}")
+        robot_target = self.robot.calculate_robot_coords_for_capsule(**capsule_target)
+        self.logger.info(f"Coordonnées robot calculées : {robot_target}")
 
         with robot_lock:
-            self.logger.info(f"Démarrage du mouvement vers le point robot {point_index + 1}")
-            self.robot.start_move_to(**robot_target_coords)
+            self.logger.info("Démarrage du mouvement.")
+            self.robot.start_move_to(**robot_target)
 
         return StateWaitForMove, context
 
@@ -44,13 +106,24 @@ class StateWaitForMove(State):
 
     def execute(self, context):
         robot_lock = context['robot_lock']
+
+        # On attend la fin du mouvement courant (segment en cours)
         with robot_lock:
-            if self.robot.is_motion_complete():
-                self.logger.info("Mouvement terminé.")
-                return StateStabilize, context
-            else:
-                # Le mouvement n'est pas terminé, on reste dans cet état
+            if not self.robot.is_motion_complete():
                 return StateWaitForMove, context
+
+        # Si on était en mode "sécurité", enchaîner les segments restants
+        safety_seq = context.get('_safety_seq')
+        if safety_seq:
+            next_robot = safety_seq.pop(0)
+            self.logger.info("Segment terminé, démarrage du segment suivant.")
+            with robot_lock:
+                self.robot.start_move_to(**next_robot)
+            return StateWaitForMove, context
+
+        # Sinon, fin de mouvement "classique" → stabilisation (inchangé)
+        self.logger.info("Mouvement terminé.")
+        return StateStabilize, context
 
 
 class StateStabilize(State):
