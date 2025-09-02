@@ -1,6 +1,7 @@
 import sys
 import logging
 import logging.handlers
+from logging import FileHandler
 import time
 import os
 from pathlib import Path
@@ -23,49 +24,110 @@ from src.gui.resource_manager import ResourceManager
 from src.gui.commands import AddPointCommand, DeletePointsCommand, MovePointCommand, ChangeCellCommand
 from src.gui.log_viewer_window import LogViewerWindow
 
+def _get_active_log_file(logger_candidates: list[str]) -> Path | None:
+    """
+    Retourne le chemin du premier fichier géré par un FileHandler
+    trouvé parmi les loggers candidats.
+    """
+    for name in logger_candidates:
+        lg = logging.getLogger(name)
+        for h in lg.handlers:
+            if isinstance(h, FileHandler):
+                try:
+                    return Path(h.baseFilename)
+                except Exception:
+                    pass
+    return None
 
 # --- CONFIGURATION CENTRALISÉE DES LOGS ---
 LOG_DIR = Path("logs")
 LOG_DIR.mkdir(exist_ok=True)
-ROBOT_LOG_FILE = LOG_DIR / "robot_app.log"
-PULSE_LOG_FILE = LOG_DIR / "pulse_driver.log"
+SESSION_TS = time.strftime("%Y%m%d_%H%M%S")
+ROBOT_LOG_FILE = LOG_DIR / f"robot_app_{SESSION_TS}.log"
+PULSE_LOG_FILE = LOG_DIR / f"pulse_driver_{SESSION_TS}.log"
 
 def setup_logging():
-    """Configure les loggers pour l'application avec des fichiers distincts."""
-    log_formatter = logging.Formatter('%(asctime)s - %(name)-25s - %(levelname)-8s - (%(threadName)s) %(message)s')
+    """
+    Configure le logging pour la session en cours :
+      - Console (INFO+)
+      - Fichier robot:  logs/robot_YYYYMMDD_HHMMSS.log
+      - Fichier pulse:  logs/pulse_YYYYMMDD_HHMMSS.log
+    Un nouveau duo de fichiers est créé à chaque lancement.
+    """
+    import sys
+    import logging
+    from pathlib import Path
+    from datetime import datetime
 
-    # Logger Racine (pour la console)
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)  # Capturer tous les niveaux
+    # -------- Où écrire les logs ? --------
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # exécutable PyInstaller → écrire à côté de l'exe
+        base_dir = Path(sys.executable).resolve().parent
+    else:
+        # exécution depuis les sources → racine du projet
+        # (adapté à ton layout : launcher.py à la racine, code sous src/)
+        base_dir = Path(__file__).resolve().parents[2]  # .../robot-acoustic-gui
+        # si __file__ est sous src/gui/new_gui.py, parents[2] remonte à la racine
 
-    # Vider les handlers existants pour éviter les doublons
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
+    logs_dir = base_dir / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
 
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(log_formatter)
-    console_handler.setLevel(logging.INFO)  # N'afficher que INFO et plus dans la console
-    root_logger.addHandler(console_handler)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    robot_log = logs_dir / f"robot_{ts}.log"
+    pulse_log = logs_dir / f"pulse_{ts}.log"
 
-    # Handler pour les logs Robot
-    robot_handler = logging.handlers.RotatingFileHandler(ROBOT_LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=2,
-                                                         encoding='utf-8')
-    robot_handler.setFormatter(log_formatter)
-    robot_handler.setLevel(logging.DEBUG)
-    logging.getLogger("RobotApp").addHandler(robot_handler)
+    # -------- Formatters & Handlers --------
+    fmt = logging.Formatter(
+        fmt="%(asctime)s - %(name)-28s - %(levelname)-8s - (%(threadName)s) %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
 
-    # Handler pour les logs PULSE
-    pulse_handler = logging.handlers.RotatingFileHandler(PULSE_LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=2,
-                                                         encoding='utf-8')
-    pulse_handler.setFormatter(log_formatter)
-    pulse_handler.setLevel(logging.DEBUG)
-    # On attache ce handler spécifiquement au logger du driver Pulse
-    logging.getLogger("RobotApp.PulseDriver").addHandler(pulse_handler)
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(fmt)
 
-    # Empêcher les logs Pulse de remonter au logger "RobotApp" pour ne pas les écrire dans les deux fichiers
-    logging.getLogger("RobotApp.PulseDriver").propagate = False
+    robot_fh = logging.FileHandler(robot_log, mode="w", encoding="utf-8", errors="replace")
+    robot_fh.setLevel(logging.DEBUG)
+    robot_fh.setFormatter(fmt)
 
-    logging.info("Système de logging initialisé.")
+    pulse_fh = logging.FileHandler(pulse_log, mode="w", encoding="utf-8", errors="replace")
+    pulse_fh.setLevel(logging.DEBUG)
+    pulse_fh.setFormatter(fmt)
+
+    # -------- Root logger: console uniquement --------
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    # Nettoyage des handlers existants si relance interactive
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    root.addHandler(console)
+
+    # -------- Route les logs “robot” vers robot_fh --------
+    # On capte au minimum Galil + RobotController ; ajoute d'autres si besoin.
+    for name in ("RobotApp.GalilDriver", "RobotApp.RobotController"):
+        lg = logging.getLogger(name)
+        lg.setLevel(logging.DEBUG)
+        # éviter doublons si setup_logging() est rappelé
+        for h in list(lg.handlers):
+            lg.removeHandler(h)
+        lg.addHandler(robot_fh)
+        # on laisse propagate=True (ainsi on voit aussi passer en console via root)
+        lg.propagate = True
+
+    # -------- Route les logs “pulse” vers pulse_fh --------
+    # Assure-toi que le driver PULSE loggue bien sous ce nom.
+    for name in ("RobotApp.PulseLabshopDriver",):
+        lg = logging.getLogger(name)
+        lg.setLevel(logging.DEBUG)
+        for h in list(lg.handlers):
+            lg.removeHandler(h)
+        lg.addHandler(pulse_fh)
+        lg.propagate = True
+
+    # -------- Petit message de démarrage --------
+    logging.getLogger("root").info("Système de logging initialisé.")
+    logging.getLogger("root").info(f"Logs robot : {robot_log}")
+    logging.getLogger("root").info(f"Logs pulse : {pulse_log}")
 # --- FIN DE LA SECTION LOGS ---
 
 
@@ -677,11 +739,14 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _open_robot_log_viewer(self):
-        """Ouvre ou active la fenêtre de log du robot."""
+        # on regarde d'abord RobotController (souvent le plus bavard), puis GalilDriver
+        path = _get_active_log_file(["RobotApp.RobotController", "RobotApp.GalilDriver"])
+        if not path:
+            QMessageBox.information(self, "Logs Robot", "Aucun fichier de log Robot n’a été trouvé pour cette session.")
+            return
+        title = f"Logs Robot & Contrôleur — {path.name}"
         if self.robot_log_window is None or not self.robot_log_window.isVisible():
-            self.robot_log_window = LogViewerWindow(
-                str(ROBOT_LOG_FILE), "Logs Robot & Application", "log_robot.png", self
-            )
+            self.robot_log_window = LogViewerWindow(str(path), title, "log_robot.png", self)
             self.robot_log_window.show()
         else:
             self.robot_log_window.activateWindow()
@@ -689,11 +754,13 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _open_pulse_log_viewer(self):
-        """Ouvre ou active la fenêtre de log de PULSE."""
+        path = _get_active_log_file(["RobotApp.PulseLabshopDriver"])
+        if not path:
+            QMessageBox.information(self, "Logs PULSE", "Aucun fichier de log PULSE n’a été trouvé pour cette session.")
+            return
+        title = f"Logs Interface PULSE — {path.name}"
         if self.pulse_log_window is None or not self.pulse_log_window.isVisible():
-            self.pulse_log_window = LogViewerWindow(
-                str(PULSE_LOG_FILE), "Logs Interface PULSE LabShop", "log_pulse.png", self
-            )
+            self.pulse_log_window = LogViewerWindow(str(path), title, "log_pulse.png", self)
             self.pulse_log_window.show()
         else:
             self.pulse_log_window.activateWindow()

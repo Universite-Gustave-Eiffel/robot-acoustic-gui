@@ -33,7 +33,7 @@ for msg_type, param_dict in _event_param_maps.items():
         if val not in BKNOTIFICATION_NAMES or "RawParamValue" in BKNOTIFICATION_NAMES[val]:
             BKNOTIFICATION_NAMES[val] = f"{name_str_base}({val})"
 
-logger = logging.getLogger("RobotApp.PulseDriver")
+logger = logging.getLogger("RobotApp.PulseLabshopDriver")
 
 
 class PulseTemplateEvents:
