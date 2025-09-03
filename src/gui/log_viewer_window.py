@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 # src/gui/log_viewer_window.py
 
-
-
 import os
 from collections import deque
 from pathlib import Path
@@ -122,8 +120,6 @@ class LogViewerWindow(QDialog):
         if self._auto_scroll:
             self._scroll_to_bottom()
 
-
-
     def _on_open_dir(self):
         if not self.file_path.exists():
             QMessageBox.information(self, "Ouvrir dossier", "Fichier introuvable.")
@@ -183,12 +179,20 @@ class LogViewerWindow(QDialog):
             return
 
         was_bottom = self._is_near_bottom()
-        self.view.moveCursor(QTextCursor.End)
-        self.view.insertPlainText("".join(filtered))
+        sb = self.view.verticalScrollBar()
+        prev_value = sb.value()
+
+        doc_cursor = QTextCursor(self.view.document())
+        doc_cursor.movePosition(QTextCursor.End)
+        doc_cursor.insertText("".join(filtered))
         self._last_render_count += len(filtered)
 
+        # Autoscroll seulement si actif OU si on était déjà en bas
         if self._auto_scroll or was_bottom:
             self._scroll_to_bottom()
+        else:
+            # On restaure strictement la position précédente
+            sb.setValue(prev_value)
 
     def _rebuild_view_full(self):
         filtered = self._apply_level_filter(list(self._buffer))
@@ -198,11 +202,6 @@ class LogViewerWindow(QDialog):
             self._scroll_to_bottom()
 
     def _apply_level_filter(self, lines: List[str]) -> List[str]:
-        """
-        Hypothèse : format "... - <LOGGER> - <LEVEL> - ..."
-        On extrait <LEVEL> par split(" - "), tolérant les espaces.
-        Si on ne parvient pas à extraire le niveau, on garde la ligne.
-        """
         out: List[str] = []
         enabled = self._levels_enabled
 
