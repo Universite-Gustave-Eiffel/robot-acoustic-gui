@@ -14,14 +14,16 @@ from PySide6.QtWidgets import (
 )
 
 LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+MAX_DOC_LINES = 20000  # borne d'affichage : n'affiche que les N dernières lignes dans le widget
 
 
 class LogViewerWindow(QDialog):
     """
-    Visionneuse de logs minimaliste :
-      - lit tout le fichier au démarrage puis suit les ajouts (tail -f)
-      - filtres par niveaux via cases à cocher
-      - défilement automatique optionnel
+    Visionneuse de logs :
+      - suit le fichier (tail -f) sans le tronquer
+      - filtre par niveaux
+      - défilement auto optionnel
+      - borne l'affichage pour rester fluide (le fichier, lui, reste complet)
     """
     def __init__(self, file_path: str, title: str, icon_name_or_path: Optional[str] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -36,7 +38,7 @@ class LogViewerWindow(QDialog):
 
         # état lecture
         self._pos: int = 0
-        self._buffer: Deque[str] = deque(maxlen=20000)  # garde 20k lignes récentes
+        self._buffer: Deque[str] = deque(maxlen=20000)  # buffer mémoire borné pour rebuild rapide
         self._last_render_count: int = 0
 
         # filtres niveaux (par défaut tout coché)
@@ -182,17 +184,20 @@ class LogViewerWindow(QDialog):
         sb = self.view.verticalScrollBar()
         prev_value = sb.value()
 
+        # insertion via curseur de document (pas le curseur du widget)
         doc_cursor = QTextCursor(self.view.document())
         doc_cursor.movePosition(QTextCursor.End)
         doc_cursor.insertText("".join(filtered))
         self._last_render_count += len(filtered)
 
-        # Autoscroll seulement si actif OU si on était déjà en bas
+        # autoscroll seulement si actif OU si on était déjà en bas
         if self._auto_scroll or was_bottom:
             self._scroll_to_bottom()
         else:
-            # On restaure strictement la position précédente
             sb.setValue(prev_value)
+
+        # borne l'affichage pour garder la vue fluide (le fichier n'est pas touché)
+        self._trim_document_if_needed()
 
     def _rebuild_view_full(self):
         filtered = self._apply_level_filter(list(self._buffer))
@@ -200,6 +205,7 @@ class LogViewerWindow(QDialog):
         self._last_render_count = len(filtered)
         if self._auto_scroll:
             self._scroll_to_bottom()
+        self._trim_document_if_needed()
 
     def _apply_level_filter(self, lines: List[str]) -> List[str]:
         out: List[str] = []
@@ -215,7 +221,7 @@ class LogViewerWindow(QDialog):
             if level in enabled:
                 if not enabled[level]:
                     continue  # niveau désactivé → on saute
-            # si niveau inconnu, on affiche quand même
+            # niveau inconnu → on affiche quand même
             out.append(ln)
 
         return out
@@ -229,6 +235,36 @@ class LogViewerWindow(QDialog):
     def _scroll_to_bottom(self):
         sb = self.view.verticalScrollBar()
         sb.setValue(sb.maximum())
+
+    def _trim_document_if_needed(self):
+        """
+        Maintient le nombre de blocs (≈ lignes) affichés sous MAX_DOC_LINES
+        sans jamais toucher au fichier source.
+        """
+        doc = self.view.document()
+        blocks = doc.blockCount()
+        if blocks <= MAX_DOC_LINES:
+            return
+
+        excess = blocks - MAX_DOC_LINES
+
+        sb = self.view.verticalScrollBar()
+        was_bottom = self._is_near_bottom()
+        prev_value = sb.value()
+
+        cur = QTextCursor(doc)
+        start_pos = doc.findBlockByNumber(0).position()
+        end_pos = doc.findBlockByNumber(excess).position()
+        cur.setPosition(start_pos)
+        cur.setPosition(end_pos, QTextCursor.KeepAnchor)
+        cur.removeSelectedText()
+        # nettoie un éventuel \n résiduel
+        cur.deleteChar()
+
+        if self._auto_scroll or was_bottom:
+            self._scroll_to_bottom()
+        else:
+            sb.setValue(prev_value)
 
     def closeEvent(self, ev):
         try:
