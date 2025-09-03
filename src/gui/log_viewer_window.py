@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # src/gui/log_viewer_window.py
 
-from __future__ import annotations
+
 
 import os
 from collections import deque
