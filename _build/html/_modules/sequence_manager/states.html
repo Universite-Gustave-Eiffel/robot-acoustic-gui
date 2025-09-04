@@ -1,0 +1,510 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="fr" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sequence_manager.states &mdash; Documentation Robot Acoustic GUI 0.1.0</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=897fae25"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../_static/translations.js?v=e6b791cb"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Recherche" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            Robot Acoustic GUI
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Rechercher docs" aria-label="Rechercher docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contenu de la Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../developer_guide.html">Guide du Développeur</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api_reference.html">Référence de l’API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Robot Acoustic GUI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Code du module</a></li>
+      <li class="breadcrumb-item active">sequence_manager.states</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Code source de sequence_manager.states</h1><div class="highlight"><pre>
+<span></span><span class="c1"># src/sequence_manager/states.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+
+<div class="viewcode-block" id="State">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.State">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Classe de base abstraite pour tous les états de la machine à états (FSM).</span>
+
+<span class="sd">    :param robot: L&#39;instance du contrôleur robot, partagée entre les états.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">robot</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise un état.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot</span> <span class="o">=</span> <span class="n">robot</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RobotApp.FSM.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="State.execute">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.State.execute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Exécute la logique de l&#39;état.</span>
+
+<span class="sd">        Cette méthode doit être implémentée par toutes les sous-classes.</span>
+
+<span class="sd">        :param context: Un dictionnaire contenant l&#39;état partagé de la séquence</span>
+<span class="sd">                        (index du point courant, liste de points, etc.).</span>
+<span class="sd">        :return: Un tuple contenant la classe du prochain état à exécuter et</span>
+<span class="sd">                 le contexte mis à jour.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="StateIdle">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateIdle">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StateIdle</span><span class="p">(</span><span class="n">State</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;État de repos initial. La FSM ne fait rien.&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="StateIdle.execute">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateIdle.execute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ne fait rien et reste dans l&#39;état Idle.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">StateIdle</span><span class="p">,</span> <span class="n">context</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="StateStartMove">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateStartMove">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StateStartMove</span><span class="p">(</span><span class="n">State</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Démarre le mouvement du robot vers le point cible.</span>
+
+<span class="sd">    Calcule les coordonnées robot cibles à partir des coordonnées capsule du point.</span>
+<span class="sd">    Si le mode de sécurité est activé, il décompose le mouvement en plusieurs</span>
+<span class="sd">    segments (montée, translation, descente).</span>
+<span class="sd">    Il lance le premier segment de mouvement de manière non-bloquante.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="StateStartMove.execute">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateStartMove.execute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">point_index</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;current_index&#39;</span><span class="p">]</span>
+        <span class="n">point</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;points&#39;</span><span class="p">][</span><span class="n">point_index</span><span class="p">]</span>
+        <span class="n">robot_lock</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;robot_lock&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[DEBUG] sequence_params dans le contexte = </span><span class="si">{</span><span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;sequence_params&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Cible capsule (comme avant)</span>
+        <span class="n">capsule_target</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;X&#39;</span><span class="p">:</span> <span class="n">point</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">:</span> <span class="n">point</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">:</span> <span class="n">point</span><span class="o">.</span><span class="n">z</span><span class="p">,</span>
+                          <span class="s1">&#39;THETA&#39;</span><span class="p">:</span> <span class="n">point</span><span class="o">.</span><span class="n">theta</span><span class="p">,</span> <span class="s1">&#39;PHI&#39;</span><span class="p">:</span> <span class="n">point</span><span class="o">.</span><span class="n">phi</span><span class="p">}</span>
+
+        <span class="c1"># Paramètres de séquence (issus de la fenêtre Config)</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;sequence_params&#39;</span><span class="p">,</span> <span class="p">{})</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="n">safety_on</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;activer_securite_deplacement&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">))</span>
+        <span class="n">z_safe</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;hauteur_securite_deplacement_z&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+
+        <span class="c1"># On nettoie d&#39;éventuels restes d&#39;une séquence précédente</span>
+        <span class="n">context</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;_safety_seq&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">safety_on</span> <span class="ow">and</span> <span class="n">z_safe</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># Position capsule actuelle (si dispo ; fallback neutre sinon)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">,</span> <span class="s2">&quot;update_positions&quot;</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">update_positions</span><span class="p">()</span>
+                <span class="n">cur_caps</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">capsule_pos</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="n">cur_caps</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;X&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;THETA&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;PHI&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">}</span>
+
+            <span class="n">cur_caps</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s1">&#39;X&#39;</span><span class="p">:</span> <span class="n">cur_caps</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="n">capsule_target</span><span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">]),</span>
+                <span class="s1">&#39;Y&#39;</span><span class="p">:</span> <span class="n">cur_caps</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="n">capsule_target</span><span class="p">[</span><span class="s1">&#39;Y&#39;</span><span class="p">]),</span>
+                <span class="s1">&#39;Z&#39;</span><span class="p">:</span> <span class="n">cur_caps</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;Z&#39;</span><span class="p">,</span> <span class="n">capsule_target</span><span class="p">[</span><span class="s1">&#39;Z&#39;</span><span class="p">]),</span>
+                <span class="s1">&#39;THETA&#39;</span><span class="p">:</span> <span class="n">cur_caps</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;THETA&#39;</span><span class="p">,</span> <span class="n">capsule_target</span><span class="p">[</span><span class="s1">&#39;THETA&#39;</span><span class="p">]),</span>
+                <span class="s1">&#39;PHI&#39;</span><span class="p">:</span> <span class="n">cur_caps</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;PHI&#39;</span><span class="p">,</span> <span class="n">capsule_target</span><span class="p">[</span><span class="s1">&#39;PHI&#39;</span><span class="p">]),</span>
+            <span class="p">}</span>
+
+            <span class="c1"># Construit les segments capsule (seulement ceux utiles)</span>
+            <span class="n">seg_caps</span> <span class="o">=</span> <span class="p">[]</span>
+
+            <span class="c1"># 1) montée à Zsécurité si on est en dessous</span>
+            <span class="k">if</span> <span class="n">cur_caps</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;Z&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">z_safe</span><span class="p">:</span>
+                <span class="n">up</span> <span class="o">=</span> <span class="n">cur_caps</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                <span class="n">up</span><span class="p">[</span><span class="s1">&#39;Z&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">z_safe</span>
+                <span class="n">seg_caps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">up</span><span class="p">)</span>
+
+            <span class="c1"># 2) translation XY/angles vers la cible à Zsécurité</span>
+            <span class="n">seg_caps</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                <span class="s1">&#39;X&#39;</span><span class="p">:</span> <span class="n">capsule_target</span><span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">],</span> <span class="s1">&#39;Y&#39;</span><span class="p">:</span> <span class="n">capsule_target</span><span class="p">[</span><span class="s1">&#39;Y&#39;</span><span class="p">],</span> <span class="s1">&#39;Z&#39;</span><span class="p">:</span> <span class="n">z_safe</span><span class="p">,</span>
+                <span class="s1">&#39;THETA&#39;</span><span class="p">:</span> <span class="n">capsule_target</span><span class="p">[</span><span class="s1">&#39;THETA&#39;</span><span class="p">],</span> <span class="s1">&#39;PHI&#39;</span><span class="p">:</span> <span class="n">capsule_target</span><span class="p">[</span><span class="s1">&#39;PHI&#39;</span><span class="p">],</span>
+            <span class="p">})</span>
+
+            <span class="c1"># 3) descente au Z cible si différent</span>
+            <span class="k">if</span> <span class="n">capsule_target</span><span class="p">[</span><span class="s1">&#39;Z&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">z_safe</span><span class="p">:</span>
+                <span class="n">seg_caps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">capsule_target</span><span class="p">)</span>
+
+            <span class="c1"># Convertit chaque segment en coordonnées robot et les stocke dans le contexte</span>
+            <span class="n">context</span><span class="p">[</span><span class="s1">&#39;_safety_seq&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">calculate_robot_coords_for_capsule</span><span class="p">(</span><span class="o">**</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">seg_caps</span>
+            <span class="p">]</span>
+
+            <span class="c1"># Démarre le premier segment</span>
+            <span class="n">first_robot</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;_safety_seq&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Trajectoire sécurisée (Z=</span><span class="si">{</span><span class="n">z_safe</span><span class="si">}</span><span class="s2"> mm) — 1/</span><span class="si">{</span><span class="mi">1</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;_safety_seq&#39;</span><span class="p">])</span><span class="si">}</span><span class="s2"> segment(s).&quot;</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">robot_lock</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">start_move_to</span><span class="p">(</span><span class="o">**</span><span class="n">first_robot</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">StateWaitForMove</span><span class="p">,</span> <span class="n">context</span>
+
+        <span class="c1"># ---- CAS NORMAL (inchangé) : déplacement direct en un segment ----</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Calcul des coordonnées robot pour le point capsule </span><span class="si">{</span><span class="n">point_index</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">robot_target</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">calculate_robot_coords_for_capsule</span><span class="p">(</span><span class="o">**</span><span class="n">capsule_target</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Coordonnées robot calculées : </span><span class="si">{</span><span class="n">robot_target</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">robot_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Démarrage du mouvement.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">start_move_to</span><span class="p">(</span><span class="o">**</span><span class="n">robot_target</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">StateWaitForMove</span><span class="p">,</span> <span class="n">context</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="StateWaitForMove">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateWaitForMove">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StateWaitForMove</span><span class="p">(</span><span class="n">State</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Attend la fin du mouvement du robot en cours.</span>
+
+<span class="sd">    Cet état interroge l&#39;état du robot sans bloquer la FSM. Si le mouvement</span>
+<span class="sd">    est un mouvement de sécurité multi-segments, il enchaîne le segment</span>
+<span class="sd">    suivant une fois le précédent terminé.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="StateWaitForMove.execute">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateWaitForMove.execute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">robot_lock</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;robot_lock&#39;</span><span class="p">]</span>
+
+        <span class="c1"># On attend la fin du mouvement courant (segment en cours)</span>
+        <span class="k">with</span> <span class="n">robot_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">is_motion_complete</span><span class="p">():</span>
+                <span class="k">return</span> <span class="n">StateWaitForMove</span><span class="p">,</span> <span class="n">context</span>
+
+        <span class="c1"># Si on était en mode &quot;sécurité&quot;, enchaîner les segments restants</span>
+        <span class="n">safety_seq</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;_safety_seq&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">safety_seq</span><span class="p">:</span>
+            <span class="n">next_robot</span> <span class="o">=</span> <span class="n">safety_seq</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Segment terminé, démarrage du segment suivant.&quot;</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">robot_lock</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">start_move_to</span><span class="p">(</span><span class="o">**</span><span class="n">next_robot</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">StateWaitForMove</span><span class="p">,</span> <span class="n">context</span>
+
+        <span class="c1"># Sinon, fin de mouvement &quot;classique&quot; → stabilisation (inchangé)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Mouvement terminé.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">StateStabilize</span><span class="p">,</span> <span class="n">context</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="StateStabilize">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateStabilize">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StateStabilize</span><span class="p">(</span><span class="n">State</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Marque une pause pour permettre la stabilisation mécanique du robot.</span>
+
+<span class="sd">    La durée de la stabilisation est définie dans les paramètres de la séquence.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="StateStabilize.execute">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateStabilize.execute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s1">&#39;stabilize_end_time&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">context</span><span class="p">:</span>
+            <span class="n">sequence_params</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;sequence_params&#39;</span><span class="p">,</span> <span class="p">{})</span>
+            <span class="n">temps_stabilisation</span> <span class="o">=</span> <span class="n">sequence_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;temps_stabilisation_s&#39;</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Stabilisation pendant </span><span class="si">{</span><span class="n">temps_stabilisation</span><span class="si">}</span><span class="s2">s...&quot;</span><span class="p">)</span>
+            <span class="n">context</span><span class="p">[</span><span class="s1">&#39;stabilize_end_time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="n">temps_stabilisation</span>
+            <span class="k">return</span> <span class="n">StateStabilize</span><span class="p">,</span> <span class="n">context</span>
+
+        <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;stabilize_end_time&#39;</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stabilisation terminée.&quot;</span><span class="p">)</span>
+            <span class="k">del</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;stabilize_end_time&#39;</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">StateStartMeasure</span><span class="p">,</span> <span class="n">context</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">StateStabilize</span><span class="p">,</span> <span class="n">context</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="StateStartMeasure">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateStartMeasure">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StateStartMeasure</span><span class="p">(</span><span class="n">State</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Demande le démarrage d&#39;une mesure à PULSE.</span>
+
+<span class="sd">    Émet un signal (`start_measure_requested`) vers le MainController</span>
+<span class="sd">    et passe à un état d&#39;attente de la confirmation.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="StateStartMeasure.execute">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateStartMeasure.execute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">seq_manager</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;sequence_manager&#39;</span><span class="p">]</span>
+        <span class="c1"># Initialiser le compteur de mesures pour ce point si ce n&#39;est pas déjà fait</span>
+        <span class="n">context</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;measurement_count&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Démarrage de la mesure #</span><span class="si">{</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;measurement_count&#39;</span><span class="p">]</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> pour le point </span><span class="si">{</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;current_index&#39;</span><span class="p">]</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="n">seq_manager</span><span class="o">.</span><span class="n">action_completed_event</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">seq_manager</span><span class="o">.</span><span class="n">action_success</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">seq_manager</span><span class="o">.</span><span class="n">start_measure_requested</span><span class="o">.</span><span class="n">emit</span><span class="p">()</span>
+
+        <span class="n">context</span><span class="p">[</span><span class="s1">&#39;previous_state&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span>
+        <span class="k">return</span> <span class="n">StateWaitingForMeasureAction</span><span class="p">,</span> <span class="n">context</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="StateWaitingForMeasureAction">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateWaitingForMeasureAction">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StateWaitingForMeasureAction</span><span class="p">(</span><span class="n">State</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Attend qu&#39;une action PULSE (démarrage, sauvegarde) soit terminée.</span>
+
+<span class="sd">    Cet état se met en pause, attendant que le MainController signale la fin</span>
+<span class="sd">    de l&#39;opération PULSE via l&#39;événement `action_completed_event`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="StateWaitingForMeasureAction.execute">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateWaitingForMeasureAction.execute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">seq_manager</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;sequence_manager&#39;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">seq_manager</span><span class="o">.</span><span class="n">action_completed_event</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">0.1</span><span class="p">):</span>  <span class="c1"># Attente non-bloquante</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">seq_manager</span><span class="o">.</span><span class="n">action_success</span><span class="p">:</span>
+                <span class="n">context</span><span class="p">[</span><span class="s1">&#39;error&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Action PULSE a échoué: </span><span class="si">{</span><span class="n">seq_manager</span><span class="o">.</span><span class="n">action_message</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">return</span> <span class="n">StateError</span><span class="p">,</span> <span class="n">context</span>
+
+            <span class="c1"># Détermine le prochain état en fonction de l&#39;état précédent</span>
+            <span class="k">if</span> <span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;previous_state&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="n">StateStartMeasure</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">StateWaitForMeasure</span><span class="p">,</span> <span class="n">context</span>
+            <span class="k">elif</span> <span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;previous_state&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="n">StateSaveMeasure</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">StateNextPoint</span><span class="p">,</span> <span class="n">context</span>
+
+        <span class="c1"># L&#39;action n&#39;est pas finie, on reste dans cet état</span>
+        <span class="k">return</span> <span class="n">StateWaitingForMeasureAction</span><span class="p">,</span> <span class="n">context</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="StateWaitForMeasure">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateWaitForMeasure">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StateWaitForMeasure</span><span class="p">(</span><span class="n">State</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Attend que la mesure PULSE soit physiquement terminée.</span>
+
+<span class="sd">    Interroge l&#39;état du driver PULSE (``is_measurement_complete``) jusqu&#39;à</span>
+<span class="sd">    ce que la mesure soit finie.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="StateWaitForMeasure.execute">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateWaitForMeasure.execute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">pulse</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;sequence_manager&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">pulse</span>
+        <span class="k">if</span> <span class="n">pulse</span><span class="o">.</span><span class="n">is_measurement_complete</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Mesure PULSE terminée.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">StateSaveMeasure</span><span class="p">,</span> <span class="n">context</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">StateWaitForMeasure</span><span class="p">,</span> <span class="n">context</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="StateSaveMeasure">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateSaveMeasure">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StateSaveMeasure</span><span class="p">(</span><span class="n">State</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Demande la sauvegarde des données de la mesure PULSE.</span>
+
+<span class="sd">    Construit le nom de fichier final (en gérant les mesures multiples pour</span>
+<span class="sd">    un même point) et émet un signal (`save_measure_requested`) vers le</span>
+<span class="sd">    MainController.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="StateSaveMeasure.execute">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateSaveMeasure.execute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">seq_manager</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;sequence_manager&#39;</span><span class="p">]</span>
+        <span class="n">point_index</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;current_index&#39;</span><span class="p">]</span>
+        <span class="n">point</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;points&#39;</span><span class="p">][</span><span class="n">point_index</span><span class="p">]</span>
+        <span class="n">num_measurements</span> <span class="o">=</span> <span class="n">point</span><span class="o">.</span><span class="n">num_measurements</span>
+
+        <span class="n">base_filename</span> <span class="o">=</span> <span class="n">point</span><span class="o">.</span><span class="n">measurement_file</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">base_filename</span><span class="p">:</span>
+            <span class="n">base_filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;base_filename&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;mesure&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">_point_</span><span class="si">{</span><span class="n">point_index</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">:</span><span class="s2">03d</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="c1"># Gérer les noms de fichiers multiples</span>
+        <span class="n">final_filename</span> <span class="o">=</span> <span class="n">base_filename</span>
+        <span class="k">if</span> <span class="n">num_measurements</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">base</span><span class="p">,</span> <span class="n">ext</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">base_filename</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">ext</span><span class="p">:</span>
+                <span class="n">ext</span> <span class="o">=</span> <span class="s2">&quot;.txt&quot;</span>
+            <span class="n">current_count</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;measurement_count&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">final_filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">current_count</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}{</span><span class="n">ext</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Demande de sauvegarde vers &#39;</span><span class="si">{</span><span class="n">final_filename</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+        <span class="n">seq_manager</span><span class="o">.</span><span class="n">action_completed_event</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">seq_manager</span><span class="o">.</span><span class="n">action_success</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="n">seq_manager</span><span class="o">.</span><span class="n">save_measure_requested</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">final_filename</span><span class="p">)</span>
+        <span class="n">context</span><span class="p">[</span><span class="s1">&#39;previous_state&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">StateSaveMeasure</span>
+        <span class="k">return</span> <span class="n">StateWaitingForMeasureAction</span><span class="p">,</span> <span class="n">context</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="StateNextPoint">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateNextPoint">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StateNextPoint</span><span class="p">(</span><span class="n">State</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Décide de la prochaine action après une sauvegarde réussie.</span>
+
+<span class="sd">    Incrémente le compteur de mesures. S&#39;il reste des mesures à faire pour</span>
+<span class="sd">    le point courant, il retourne à l&#39;état `StateStartMeasure`. Sinon, il</span>
+<span class="sd">    passe au point suivant (retour à `StateStartMove`) ou termine la séquence</span>
+<span class="sd">    si tous les points ont été traités ou si le mode `single_shot` est actif.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="StateNextPoint.execute">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateNextPoint.execute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">seq_manager</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;sequence_manager&#39;</span><span class="p">]</span>
+        <span class="n">point_index</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;current_index&#39;</span><span class="p">]</span>
+        <span class="n">point</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;points&#39;</span><span class="p">][</span><span class="n">point_index</span><span class="p">]</span>
+
+        <span class="c1"># Incrémenter le compteur de mesures pour le point actuel</span>
+        <span class="n">context</span><span class="p">[</span><span class="s1">&#39;measurement_count&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;measurement_count&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;measurement_count&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> sur </span><span class="si">{</span><span class="n">point</span><span class="o">.</span><span class="n">num_measurements</span><span class="si">}</span><span class="s2"> mesure(s) effectuée(s) pour ce point.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Vérifier si on doit faire d&#39;autres mesures sur le même point</span>
+        <span class="k">if</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;measurement_count&#39;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">point</span><span class="o">.</span><span class="n">num_measurements</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Bouclage pour la prochaine mesure sur le même point.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">StateStartMeasure</span><span class="p">,</span> <span class="n">context</span>
+
+        <span class="c1"># Si toutes les mesures pour ce point sont faites, on passe à la suite</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Toutes les mesures pour ce point sont terminées.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Réinitialiser le compteur pour le prochain point</span>
+        <span class="n">context</span><span class="p">[</span><span class="s1">&#39;measurement_count&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">if</span> <span class="n">seq_manager</span><span class="o">.</span><span class="n">single_shot</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Mode &#39;Point Suivant&#39; : Séquence terminée.&quot;</span><span class="p">)</span>
+            <span class="n">context</span><span class="p">[</span><span class="s1">&#39;current_index&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">return</span> <span class="n">StateEnd</span><span class="p">,</span> <span class="n">context</span>
+
+        <span class="n">context</span><span class="p">[</span><span class="s1">&#39;current_index&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;current_index&#39;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;points&#39;</span><span class="p">]):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Passage au point suivant.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">StateStartMove</span><span class="p">,</span> <span class="n">context</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Tous les points ont été mesurés.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">StateEnd</span><span class="p">,</span> <span class="n">context</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="StateEnd">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateEnd">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StateEnd</span><span class="p">(</span><span class="n">State</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;État final de la séquence. Marque la fin de l&#39;exécution.&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="StateEnd.execute">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateEnd.execute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">StateEnd</span><span class="p">,</span> <span class="n">context</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="StateError">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StateError</span><span class="p">(</span><span class="n">State</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;État atteint en cas d&#39;erreur critique durant la séquence.</span>
+
+<span class="sd">    Cet état termine immédiatement la séquence. Le message d&#39;erreur est</span>
+<span class="sd">    stocké dans le contexte pour être affiché à l&#39;utilisateur.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="StateError.execute">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.states.StateError.execute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">error_message</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="s1">&#39;Erreur inconnue.&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;État d&#39;erreur atteint : </span><span class="si">{</span><span class="n">error_message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">StateEnd</span><span class="p">,</span> <span class="n">context</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Droits d'auteur 2025, Antoine Riaublanc.</p>
+  </div>
+
+  Compilé avec <a href="https://www.sphinx-doc.org/">Sphinx</a> en utilisant un
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">thème</a>
+    fourni par <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

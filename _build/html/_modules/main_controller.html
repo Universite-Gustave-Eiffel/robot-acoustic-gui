@@ -1,0 +1,995 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="fr" data-content_root="../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>main_controller &mdash; Documentation Robot Acoustic GUI 0.1.0</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=897fae25"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/translations.js?v=e6b791cb"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Recherche" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Robot Acoustic GUI
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Rechercher docs" aria-label="Rechercher docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contenu de la Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../developer_guide.html">Guide du Développeur</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api_reference.html">Référence de l’API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Robot Acoustic GUI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Code du module</a></li>
+      <li class="breadcrumb-item active">main_controller</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Code source de main_controller</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">configparser</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">PySide6.QtCore</span><span class="w"> </span><span class="kn">import</span> <span class="n">QObject</span><span class="p">,</span> <span class="n">Signal</span><span class="p">,</span> <span class="n">Slot</span><span class="p">,</span> <span class="n">QCoreApplication</span><span class="p">,</span> <span class="n">QTimer</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">labshop_interface.PulseLabshopDriver</span><span class="w"> </span><span class="kn">import</span> <span class="n">PulseLabshopDriver</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">controller_interface.GalilDriver</span><span class="w"> </span><span class="kn">import</span> <span class="n">RobotController</span><span class="p">,</span> <span class="n">GalilDriver</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">data_manager</span><span class="w"> </span><span class="kn">import</span> <span class="n">PointManager</span><span class="p">,</span> <span class="n">Point</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sequence_manager.sequence_manager</span><span class="w"> </span><span class="kn">import</span> <span class="n">SequenceManager</span>
+
+
+<div class="viewcode-block" id="get_config">
+<a class="viewcode-back" href="../api_reference.html#main_controller.get_config">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_config</span><span class="p">(</span><span class="n">interface_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span><span class="o">,</span><span class="w"> </span><span class="nn">configparser</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+    <span class="n">config</span> <span class="o">=</span> <span class="n">configparser</span><span class="o">.</span><span class="n">ConfigParser</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">sys</span><span class="p">,</span> <span class="s1">&#39;frozen&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">sys</span><span class="p">,</span> <span class="s1">&#39;_MEIPASS&#39;</span><span class="p">):</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">_MEIPASS</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>
+
+    <span class="n">candidates</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">base</span> <span class="o">/</span> <span class="n">interface_name</span> <span class="o">/</span> <span class="s1">&#39;config.ini&#39;</span><span class="p">,</span>
+        <span class="n">base</span> <span class="o">/</span> <span class="s1">&#39;_internal&#39;</span> <span class="o">/</span> <span class="n">interface_name</span> <span class="o">/</span> <span class="s1">&#39;config.ini&#39;</span><span class="p">,</span>
+        <span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">()</span> <span class="o">/</span> <span class="n">interface_name</span> <span class="o">/</span> <span class="s1">&#39;config.ini&#39;</span>
+    <span class="p">]</span>
+
+    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s1">&#39;utf-8&#39;</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">config</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+
+    <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+        <span class="s2">&quot;Fichier de configuration introuvable.</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;- </span><span class="si">{</span><span class="n">c</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">)</span>
+    <span class="p">)</span></div>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_from_config</span><span class="p">(</span><span class="n">raw_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">cfg_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">interface_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Résout &#39;raw_path&#39; en absolu.</span>
+<span class="sd">    - Si &#39;raw_path&#39; est absolu: renvoie tel quel.</span>
+<span class="sd">    - Sinon:</span>
+<span class="sd">        * si &#39;raw_path&#39; commence par &#39;interface_name&#39; (ex: &#39;labshop_interface\\...&#39;),</span>
+<span class="sd">          on le résout par rapport au dossier parent du dossier du INI (ex: &#39;.../src&#39;),</span>
+<span class="sd">        * sinon on le résout par rapport au dossier du INI.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">raw_path</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">is_absolute</span><span class="p">():</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+
+    <span class="n">ini_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">cfg_path</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>
+    <span class="n">first</span> <span class="o">=</span> <span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">parts</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">interface_name</span> <span class="ow">and</span> <span class="n">first</span> <span class="o">==</span> <span class="n">interface_name</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="n">ini_dir</span><span class="o">.</span><span class="n">parent</span>             <span class="c1"># ex: .../src</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="n">ini_dir</span>                    <span class="c1"># ex: .../src/labshop_interface</span>
+
+    <span class="k">return</span> <span class="nb">str</span><span class="p">((</span><span class="n">base</span> <span class="o">/</span> <span class="n">p</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">())</span>
+
+
+<div class="viewcode-block" id="MainController">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MainController</span><span class="p">(</span><span class="n">QObject</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Chef d&#39;orchestre de l&#39;application.</span>
+
+<span class="sd">        Cette classe centrale gère la logique métier et sert de pont entre</span>
+<span class="sd">        l&#39;interface graphique (GUI) et les modules de bas niveau (robot, PULSE).</span>
+<span class="sd">        Elle ne contient aucune logique d&#39;interface utilisateur mais communique avec</span>
+<span class="sd">        elle via le système de signaux et slots de Qt.</span>
+
+<span class="sd">        :ivar robot: Instance du contrôleur de robot (`RobotController`).</span>
+<span class="sd">        :ivar pulse: Instance du driver PULSE (`PulseLabshopDriver`).</span>
+<span class="sd">        :ivar point_manager: Instance du gestionnaire de listes de points (`PointManager`).</span>
+<span class="sd">        :ivar sequence_thread: Thread qui exécute la séquence de mesure.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+    <span class="n">log_message_sent</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="c1"># Émet les coordonnées robot ET les coordonnées capsule</span>
+    <span class="n">robot_position_updated</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+    <span class="n">robot_move_completed</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">dict</span><span class="p">,</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">point_list_changed</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">document_modified_status_changed</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">bool</span><span class="p">)</span>
+    <span class="n">sequence_status_changed</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="n">highlight_point_in_gui</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">measure_action_completed</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+    <span class="n">sequence_finished_with_next_point</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise le MainController.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;RobotApp.MainController&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">point_manager</span> <span class="o">=</span> <span class="n">PointManager</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_file_path</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_modified</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span> <span class="n">RobotController</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_config_path</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pulse_config</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">position_timer</span> <span class="o">=</span> <span class="n">QTimer</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">position_timer</span><span class="o">.</span><span class="n">setInterval</span><span class="p">(</span><span class="mi">500</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">position_timer</span><span class="o">.</span><span class="n">timeout</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">poll_robot_position</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+
+<div class="viewcode-block" id="MainController.setup_robot">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.setup_robot">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setup_robot</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prépare l&#39;objet RobotController à partir de la configuration.</span>
+
+<span class="sd">        Cette méthode charge la configuration depuis `controller_interface/config.ini`,</span>
+<span class="sd">        instancie le `GalilDriver` et le `RobotController`. Elle ne se connecte</span>
+<span class="sd">        pas physiquement au robot.</span>
+
+<span class="sd">        :return: ``True`` si la configuration est chargée et l&#39;objet robot créé, ``False`` sinon.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_config_path</span> <span class="o">=</span> <span class="n">get_config</span><span class="p">(</span><span class="s1">&#39;controller_interface&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Configuration robot chargée depuis : </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">robot_config_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">driver</span> <span class="o">=</span> <span class="n">GalilDriver</span><span class="p">(</span>
+                <span class="n">port</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;SERIAL&#39;</span><span class="p">,</span> <span class="s1">&#39;port&#39;</span><span class="p">),</span>
+                <span class="n">baudrate</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getint</span><span class="p">(</span><span class="s1">&#39;SERIAL&#39;</span><span class="p">,</span> <span class="s1">&#39;baudrate&#39;</span><span class="p">),</span>
+                <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;SERIAL&#39;</span><span class="p">,</span> <span class="s1">&#39;timeout&#39;</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot</span> <span class="o">=</span> <span class="n">RobotController</span><span class="p">(</span><span class="n">driver</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ERREUR CRITIQUE DÉMARRAGE ROBOT : </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ERREUR CRITIQUE ROBOT : </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="MainController.load_pulse_config">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.load_pulse_config">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_pulse_config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Charge la configuration de PULSE depuis son fichier .ini.</span>
+
+<span class="sd">        Lit `labshop_interface/config.ini` et le stocke dans `self.pulse_config`.</span>
+
+<span class="sd">        :return: ``True`` si la configuration est chargée, ``False`` sinon.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pulse_config</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_config_path</span> <span class="o">=</span> <span class="n">get_config</span><span class="p">(</span><span class="s1">&#39;labshop_interface&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Configuration PULSE chargée depuis : </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">pulse_config_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">except</span> <span class="ne">FileNotFoundError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Impossible de charger la configuration PULSE : </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pulse_config</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="MainController.setup_pulse">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.setup_pulse">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setup_pulse</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prépare et initialise l&#39;interface PULSE.</span>
+
+<span class="sd">        Cette méthode doit être appelée après :meth:`load_pulse_config`.</span>
+<span class="sd">        Elle instancie le `PulseLabshopDriver`, lance l&#39;application PULSE LabShop via COM,</span>
+<span class="sd">        ouvre le projet spécifié et vérifie la connexion matérielle.</span>
+
+<span class="sd">        :return: Un tuple (ok, erreur, chemin_projet).</span>
+<span class="sd">                 - ``ok`` (bool): ``True`` si PULSE est initialisé, ``False`` sinon.</span>
+<span class="sd">                 - ``erreur`` (str | None): Message d&#39;erreur en cas d&#39;échec.</span>
+<span class="sd">                 - ``chemin_projet`` (str | None): Chemin absolu du projet .pls utilisé.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_config</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;La configuration PULSE n&#39;a pas été chargée.&quot;</span><span class="p">,</span> <span class="kc">None</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># On utilise maintenant la configuration déjà chargée</span>
+            <span class="n">cfg_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_config_path</span>
+
+            <span class="n">raw_proj</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;PulseSettings&#39;</span><span class="p">,</span> <span class="s1">&#39;project_path&#39;</span><span class="p">,</span>
+                                             <span class="n">fallback</span><span class="o">=</span><span class="s1">&#39;labshop_interface</span><span class="se">\\</span><span class="s1">pulse_projects</span><span class="se">\\</span><span class="s1">MinimalTest.pls&#39;</span><span class="p">)</span>
+            <span class="n">raw_save</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;PulseSettings&#39;</span><span class="p">,</span> <span class="s1">&#39;save_path_dir&#39;</span><span class="p">,</span>
+                                             <span class="n">fallback</span><span class="o">=</span><span class="s1">&#39;labshop_interface</span><span class="se">\\</span><span class="s1">mesures_pulse_ascii&#39;</span><span class="p">)</span>
+
+            <span class="n">proj_abs</span> <span class="o">=</span> <span class="n">_resolve_from_config</span><span class="p">(</span><span class="n">raw_proj</span><span class="p">,</span> <span class="n">cfg_path</span><span class="p">,</span> <span class="n">interface_name</span><span class="o">=</span><span class="s1">&#39;labshop_interface&#39;</span><span class="p">)</span>
+            <span class="n">save_abs</span> <span class="o">=</span> <span class="n">_resolve_from_config</span><span class="p">(</span><span class="n">raw_save</span><span class="p">,</span> <span class="n">cfg_path</span><span class="p">,</span> <span class="n">interface_name</span><span class="o">=</span><span class="s1">&#39;labshop_interface&#39;</span><span class="p">)</span>
+
+            <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">Path</span><span class="p">(</span><span class="n">proj_abs</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Projet PULSE introuvable : </span><span class="si">{</span><span class="n">proj_abs</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">proj_abs</span>
+
+            <span class="c1"># Instancier le driver avec ta signature actuelle</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span> <span class="o">=</span> <span class="n">PulseLabshopDriver</span><span class="p">(</span>
+                <span class="n">project_path</span><span class="o">=</span><span class="n">proj_abs</span><span class="p">,</span>
+                <span class="n">save_path_dir</span><span class="o">=</span><span class="n">save_abs</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">initialize_pulse</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Interface PULSE LabShop initialisée avec succès.&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">proj_abs</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;Échec de l&#39;initialisation de PULSE (COM/LabShop/boîtier).&quot;</span><span class="p">,</span> <span class="n">proj_abs</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ERREUR CRITIQUE DÉMARRAGE PULSE : </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="kc">None</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_modified</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Indique si la liste de points a été modifiée depuis la dernière sauvegarde.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_modified</span>
+
+<div class="viewcode-block" id="MainController.set_document_modified">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.set_document_modified">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">(</span><span class="nb">bool</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_document_modified</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Définit l&#39;état de modification du document (la liste de points).</span>
+
+<span class="sd">        Émet le signal :attr:`document_modified_status_changed` si l&#39;état change.</span>
+
+<span class="sd">        :param value: Le nouvel état de modification.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_modified</span> <span class="o">!=</span> <span class="n">value</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_is_modified</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">document_modified_status_changed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">value</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_notify_point_list_changed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Notifie l&#39;application qu&#39;un changement a eu lieu dans la liste de points.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_document_modified</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">point_list_changed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">get_points_as_list_of_dicts</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Liste de points mise à jour.&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MainController.poll_robot_position">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.poll_robot_position">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">poll_robot_position</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Interroge périodiquement la position du robot et met à jour l&#39;interface.</span>
+
+<span class="sd">        Cette méthode est connectée à un `QTimer`. Elle récupère les coordonnées</span>
+<span class="sd">        robot et capsule et émet le signal :attr:`robot_position_updated`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">is_connected</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_lock</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">blocking</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">robot_pos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">update_positions</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="n">robot_pos</span><span class="p">:</span>
+                        <span class="n">capsule_pos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">capsule_pos</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">robot_position_updated</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">robot_pos</span><span class="p">,</span> <span class="n">capsule_pos</span><span class="p">)</span>
+                <span class="k">finally</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">robot_lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="MainController.connect_robot">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.connect_robot">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">connect_robot</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Établit la connexion physique avec le contrôleur du robot.</span>
+
+<span class="sd">        Tente de se connecter sur le port série défini dans la configuration,</span>
+<span class="sd">        active les moteurs et démarre le timer de polling de la position.</span>
+
+<span class="sd">        :return: ``True`` en cas de succès, ``False`` sinon.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span> <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">connect</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Robot connecté avec succès.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">enable_motors</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Moteurs du robot activés.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">position_timer</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">position_timer</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ERREUR: Impossible de se connecter au robot sur le port </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;SERIAL&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;port&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="MainController.disconnect_robot">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.disconnect_robot">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">disconnect_robot</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ferme la connexion avec le robot et l&#39;interface PULSE.</span>
+
+<span class="sd">        Arrête proprement les séquences, le polling, désactive les moteurs,</span>
+<span class="sd">        et ferme les connexions série et COM.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">isRunning</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">emergency_stop</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">position_timer</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">position_timer</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Interface PULSE fermée.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">is_connected</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">disable_motors</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">disconnect</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Robot déconnecté.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainController.sync_points_from_gui">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.sync_points_from_gui">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sync_points_from_gui</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">table_data</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Synchronise la liste de points interne avec les données du tableau de la GUI.</span>
+
+<span class="sd">        :param table_data: Une liste de dictionnaires représentant les lignes du tableau.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">update_from_list_of_dicts</span><span class="p">(</span><span class="n">table_data</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainController.process_loaded_file">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.process_loaded_file">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_loaded_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Charge une liste de points depuis un fichier et met à jour l&#39;application.</span>
+
+<span class="sd">        :param file_path: Le chemin vers le fichier à charger.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">load_from_file</span><span class="p">(</span><span class="n">file_path</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">current_file_path</span> <span class="o">=</span> <span class="n">file_path</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Fichier &#39;</span><span class="si">{</span><span class="n">Path</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; chargé.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">point_list_changed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">get_points_as_list_of_dicts</span><span class="p">())</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_document_modified</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Erreur lors du chargement du fichier de points.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">point_list_changed</span><span class="o">.</span><span class="n">emit</span><span class="p">([])</span></div>
+
+
+<div class="viewcode-block" id="MainController.get_point_headers">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.get_point_headers">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_point_headers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retourne les en-têtes (noms des colonnes) pour la liste de points.</span>
+
+<span class="sd">        :return: Une liste de chaînes de caractères.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">headers</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">point_manager</span> <span class="k">else</span> <span class="p">[]</span></div>
+
+
+<div class="viewcode-block" id="MainController.save_point_list">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.save_point_list">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_point_list</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sauvegarde la liste de points dans le fichier actuellement ouvert.</span>
+
+<span class="sd">        Si aucun fichier n&#39;est ouvert, appelle :meth:`save_point_list_to_file`.</span>
+
+<span class="sd">        :return: ``True`` si la sauvegarde réussit, ``False`` sinon.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_file_path</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">save_point_list_to_file</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">current_file_path</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="MainController.save_point_list_to_file">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.save_point_list_to_file">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_point_list_to_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sauvegarde la liste de points dans un fichier spécifié.</span>
+
+<span class="sd">        :param file_path: Le chemin du fichier de destination.</span>
+<span class="sd">        :return: ``True`` si la sauvegarde réussit, ``False`` sinon.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">save_to_file</span><span class="p">(</span><span class="n">file_path</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">current_file_path</span> <span class="o">=</span> <span class="n">file_path</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Fichier &#39;</span><span class="si">{</span><span class="n">Path</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; sauvegardé.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_document_modified</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="MainController.create_new_point_list">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.create_new_point_list">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">create_new_point_list</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Réinitialise le gestionnaire de points pour une nouvelle liste vierge.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">points</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_file_path</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Nouvelle liste de points créée.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainController.add_current_position_as_point">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.add_current_position_as_point">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add_current_position_as_point</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Point</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Vérifie si tous les points de la liste ont un nom de fichier de mesure.</span>
+
+<span class="sd">        :return: Une liste des index des points sans nom de fichier.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span> <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_lock</span><span class="p">:</span>
+            <span class="n">current_pos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">update_positions</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">current_pos</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Position actuelle du robot inconnue.&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="kc">None</span>
+            <span class="n">capsule_pos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">capsule_pos</span>
+            <span class="n">new_point</span> <span class="o">=</span> <span class="n">Point</span><span class="p">(</span>
+                <span class="n">x</span><span class="o">=</span><span class="nb">round</span><span class="p">(</span><span class="n">capsule_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+                <span class="n">y</span><span class="o">=</span><span class="nb">round</span><span class="p">(</span><span class="n">capsule_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+                <span class="n">z</span><span class="o">=</span><span class="nb">round</span><span class="p">(</span><span class="n">capsule_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;Z&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+                <span class="n">theta</span><span class="o">=</span><span class="nb">round</span><span class="p">(</span><span class="n">current_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;THETA&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+                <span class="n">phi</span><span class="o">=</span><span class="nb">round</span><span class="p">(</span><span class="n">current_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;PHI&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Position capsule actuelle récupérée.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">new_point</span></div>
+
+
+<div class="viewcode-block" id="MainController.validate_filenames">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.validate_filenames">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validate_filenames</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Vérifie si tous les points de la liste ont un nom de fichier de mesure.</span>
+
+<span class="sd">        :return: Une liste des index des points sans nom de fichier.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">missing_indices</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">point</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">points</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">point</span><span class="o">.</span><span class="n">measurement_file</span><span class="p">:</span>
+                <span class="n">missing_indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">missing_indices</span></div>
+
+
+<div class="viewcode-block" id="MainController.autofill_filenames">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.autofill_filenames">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">autofill_filenames</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Génère automatiquement des noms de fichiers pour les points qui n&#39;en ont pas.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">point</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">points</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">point</span><span class="o">.</span><span class="n">measurement_file</span><span class="p">:</span>
+                <span class="n">sanitized_coords</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">c</span><span class="p">))</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="s1">&#39;m&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span>
+                    <span class="p">[</span><span class="n">point</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">point</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="n">point</span><span class="o">.</span><span class="n">z</span><span class="p">,</span> <span class="n">point</span><span class="o">.</span><span class="n">theta</span><span class="p">,</span> <span class="n">point</span><span class="o">.</span><span class="n">phi</span><span class="p">]</span>
+                <span class="p">]</span>
+                <span class="n">point</span><span class="o">.</span><span class="n">measurement_file</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;point_</span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="s1">&#39;_&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sanitized_coords</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Noms de fichiers auto-remplis.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_notify_point_list_changed</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_start_sequence_thread</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">points</span><span class="p">,</span> <span class="n">start_index</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">single_shot</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise et démarre le thread du séquenceur.</span>
+
+<span class="sd">        C&#39;est une méthode interne appelée par :meth:`start_full_sequence` et</span>
+<span class="sd">        :meth:`start_single_point_sequence`.</span>
+
+<span class="sd">        :param points: La liste d&#39;objets :class:`~src.data_manager.Point` à mesurer.</span>
+<span class="sd">        :param start_index: L&#39;index du point de départ dans la liste.</span>
+<span class="sd">        :param single_shot: Si ``True``, la séquence s&#39;arrêtera après le premier point.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">isRunning</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Une séquence est déjà en cours.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;ERREUR: Interface PULSE non prête.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">blocking</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Interface PULSE occupée.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">points</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Impossible de démarrer : la liste de points est vide.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="n">start_index</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;L&#39;index de départ (</span><span class="si">{</span><span class="n">start_index</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">) est hors limites.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Démarrage de la séquence au point </span><span class="si">{</span><span class="n">start_index</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
+
+        <span class="n">sequence_params</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;activer_securite_deplacement&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getboolean</span><span class="p">(</span><span class="s1">&#39;SEQUENCE&#39;</span><span class="p">,</span> <span class="s1">&#39;activer_securite_deplacement&#39;</span><span class="p">,</span>
+                                                                   <span class="n">fallback</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="s1">&#39;hauteur_securite_deplacement_z&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;SEQUENCE&#39;</span><span class="p">,</span> <span class="s1">&#39;hauteur_securite_deplacement_z&#39;</span><span class="p">,</span>
+                                                                   <span class="n">fallback</span><span class="o">=</span><span class="mf">20.0</span><span class="p">),</span>
+            <span class="s1">&#39;temps_stabilisation_s&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;SEQUENCE&#39;</span><span class="p">,</span> <span class="s1">&#39;temps_stabilisation_s&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="p">}</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span> <span class="o">=</span> <span class="n">SequenceManager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="p">,</span> <span class="n">points</span><span class="p">,</span> <span class="n">sequence_params</span><span class="p">,</span> <span class="n">single_shot</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;current_index&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">start_index</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">sequence_completed</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">on_sequence_finished</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">start_measure_requested</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_start_measure_requested</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">save_measure_requested</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_save_measure_requested</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">stop_robot_requested</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">stop_all_motion</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">measure_action_completed</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">on_measure_action_completed</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">active_point_changed</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">highlight_point_in_gui</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">status_changed</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sequence_status_changed</span><span class="p">)</span>
+
+        <span class="n">base_name</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">current_file_path</span><span class="p">)</span><span class="o">.</span><span class="n">stem</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_file_path</span> <span class="k">else</span> <span class="s2">&quot;mesure&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;base_filename&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">base_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;robot_lock&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_lock</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+<div class="viewcode-block" id="MainController.start_full_sequence">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.start_full_sequence">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">start_full_sequence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">start_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Démarre une séquence de mesure complète à partir d&#39;un index donné.</span>
+
+<span class="sd">        :param start_index: L&#39;index du point de départ.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">points_copy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">get_points_copy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_start_sequence_thread</span><span class="p">(</span><span class="n">points_copy</span><span class="p">,</span> <span class="n">start_index</span><span class="p">,</span> <span class="n">single_shot</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainController.start_single_point_sequence">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.start_single_point_sequence">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">start_single_point_sequence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Démarre une séquence pour mesurer un unique point.</span>
+
+<span class="sd">        :param index: L&#39;index du point à mesurer.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">points_copy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">get_points_copy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_start_sequence_thread</span><span class="p">(</span><span class="n">points_copy</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">single_shot</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+    <span class="nd">@Slot</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_start_measure_requested</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Slot qui gère une demande de démarrage de mesure de la part du séquenceur.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">measure_action_completed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;Pulse non initialisé&quot;</span><span class="p">);</span> <span class="k">return</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">start_measurement</span><span class="p">():</span> <span class="bp">self</span><span class="o">.</span><span class="n">measure_action_completed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span>
+                                                                                  <span class="s2">&quot;Impossible de démarrer la mesure PULSE&quot;</span><span class="p">);</span> <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">measure_action_completed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;Mesure démarrée&quot;</span><span class="p">)</span>
+
+    <span class="nd">@Slot</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_stop_measure_requested</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Slot qui gère une demande d&#39;arrêt de mesure de la part du séquenceur.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">measure_action_completed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;Pulse non initialisé&quot;</span><span class="p">);</span> <span class="k">return</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">stop_measurement</span><span class="p">():</span> <span class="bp">self</span><span class="o">.</span><span class="n">measure_action_completed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span>
+                                                                                 <span class="s2">&quot;Impossible d&#39;arrêter la mesure PULSE&quot;</span><span class="p">);</span> <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">measure_action_completed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;Mesure arrêtée&quot;</span><span class="p">)</span>
+
+    <span class="nd">@Slot</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_save_measure_requested</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Slot qui gère une demande de sauvegarde de la part du séquenceur.</span>
+
+<span class="sd">        :param filename: Le nom de fichier à utiliser pour la sauvegarde.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">measure_action_completed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;Pulse non initialisé&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="c1"># S&#39;assurer que le nom de fichier a une extension (mesure de sécurité)</span>
+        <span class="n">base</span><span class="p">,</span> <span class="n">ext</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">ext</span><span class="p">:</span>
+            <span class="n">filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base</span><span class="si">}</span><span class="s2">.txt&quot;</span>
+
+        <span class="n">success</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">save_function_group_ascii</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">success</span><span class="p">:</span>
+            <span class="n">saved_filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Sauvegarde réussie : </span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">saved_filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Échec de sauvegarde vers </span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">measure_action_completed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">success</span><span class="p">,</span> <span class="n">saved_filename</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MainController.stop_sequence">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.stop_sequence">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stop_sequence</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Demande un arrêt &quot;doux&quot; de la séquence en cours.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">isRunning</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Demande d&#39;arrêt (doux) de la séquence...&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="MainController.toggle_pause_sequence">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.toggle_pause_sequence">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">toggle_pause_sequence</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Met en pause ou reprend la séquence en cours.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">isRunning</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">toggle_pause</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="MainController.emergency_stop">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.emergency_stop">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">emergency_stop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Déclenche un arrêt d&#39;urgence immédiat du robot et de la séquence.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;ARRÊT D&#39;URGENCE DÉCLENCHÉ !&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">isRunning</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span>
+            <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">abort_all_motion</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span><span class="o">.</span><span class="n">locked</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="MainController.on_sequence_finished">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.on_sequence_finished">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_sequence_finished</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">final_message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">next_point_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Gère la fin d&#39;une séquence.</span>
+
+<span class="sd">        Nettoie les connexions de signaux et libère les verrous.</span>
+
+<span class="sd">        :param final_message: Le message de statut final de la séquence.</span>
+<span class="sd">        :param next_point_index: L&#39;index du point qui aurait été le suivant.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Séquence terminée. Statut: </span><span class="si">{</span><span class="n">final_message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_finished_with_next_point</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">final_message</span><span class="p">,</span> <span class="n">next_point_index</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">start_measure_requested</span><span class="o">.</span><span class="n">disconnect</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">save_measure_requested</span><span class="o">.</span><span class="n">disconnect</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">stop_robot_requested</span><span class="o">.</span><span class="n">disconnect</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">measure_action_completed</span><span class="o">.</span><span class="n">disconnect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">on_measure_action_completed</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur lors de la déconnexion des signaux : </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span><span class="o">.</span><span class="n">locked</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="MainController.start_manual_measurement">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.start_manual_measurement">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">start_manual_measurement</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Démarre une mesure manuelle unique dans PULSE.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Impossible de mesurer : interface PULSE non prête.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">blocking</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Interface PULSE occupée.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">is_measurement_active</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Une mesure est déjà en cours.&quot;</span><span class="p">)</span>
+                <span class="k">return</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Démarrage mesure manuelle...&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">is_template_ready_for_measurement</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Autorange nécessaire...&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">autorange</span><span class="p">():</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Échec de l&#39;autorange.&quot;</span><span class="p">)</span>
+                    <span class="k">return</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">start_measurement</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Erreur lors du démarrage de la mesure manuelle.&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Mesure manuelle démarrée.&quot;</span><span class="p">)</span>
+
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span><span class="o">.</span><span class="n">locked</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="MainController.save_manual_measurement">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.save_manual_measurement">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_manual_measurement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Arrête et sauvegarde une mesure manuelle dans PULSE.</span>
+
+<span class="sd">        :param filename: Le nom de fichier pour la sauvegarde.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Impossible de sauvegarder : interface PULSE non prête.&quot;</span><span class="p">);</span> <span class="k">return</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">blocking</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Interface PULSE occupée.&quot;</span><span class="p">);</span> <span class="k">return</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">stop_measurement</span><span class="p">()</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">save_function_group_ascii</span><span class="p">(</span><span class="n">filename</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Mesure manuelle sauvegardée dans &#39;</span><span class="si">{</span><span class="n">filename</span><span class="si">}</span><span class="s2">&#39;.&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Erreur lors de la sauvegarde de la mesure manuelle.&quot;</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span><span class="o">.</span><span class="n">locked</span><span class="p">():</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="MainController.move_capsule_absolute">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.move_capsule_absolute">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">move_capsule_absolute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">capsule_coords</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Déplace la capsule du robot à une position absolue spécifiée.</span>
+
+<span class="sd">        Le mouvement est exécuté dans un thread séparé pour ne pas bloquer l&#39;UI.</span>
+
+<span class="sd">        :param capsule_coords: Dictionnaire des coordonnées cibles</span>
+<span class="sd">                                (clés: &#39;X&#39;, &#39;Y&#39;, &#39;Z&#39;, &#39;THETA&#39;, &#39;PHI&#39;).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span> <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Déplacement capsule vers : </span><span class="si">{</span><span class="n">capsule_coords</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_execute_move_capsule_absolute</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">capsule_coords</span><span class="p">,))</span><span class="o">.</span><span class="n">start</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_execute_move_capsule_absolute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">capsule_coords</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Méthode exécutée dans un thread pour un mouvement absolu. (Interne)&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span> <span class="k">return</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_lock</span><span class="p">:</span>
+            <span class="n">robot_coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">calculate_robot_coords_for_capsule</span><span class="p">(</span><span class="o">**</span><span class="n">capsule_coords</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">move_to</span><span class="p">(</span><span class="o">**</span><span class="n">robot_coords</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Déplacement capsule terminé.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_move_completed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">robot_pos</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">capsule_pos</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MainController.move_to_point_data">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.move_to_point_data">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">move_to_point_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">point_data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Déplace le robot aux coordonnées extraites d&#39;un dictionnaire de point.</span>
+
+<span class="sd">        Utilisé pour la fonction &quot;Aller au point sélectionné&quot;.</span>
+
+<span class="sd">        :param point_data: Dictionnaire représentant un point de la liste.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;ERREUR: Le robot n&#39;est pas connecté.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence_thread</span><span class="o">.</span><span class="n">isRunning</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Veuillez arrêter la séquence avant de lancer un mouvement manuel.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="n">capsule_coords</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;X&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">point_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+            <span class="s1">&#39;Y&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">point_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+            <span class="s1">&#39;Z&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">point_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;z&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+            <span class="s1">&#39;THETA&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">point_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;theta&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+            <span class="s1">&#39;PHI&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">point_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;phi&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+        <span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">move_capsule_absolute</span><span class="p">(</span><span class="n">capsule_coords</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainController.define_robot_position">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.define_robot_position">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">define_robot_position</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">capsule_coords</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Redéfinit l&#39;origine du robot.</span>
+
+<span class="sd">                Assigne les coordonnées capsule spécifiées à la position physique actuelle du robot.</span>
+<span class="sd">                C&#39;est une opération de calibration.</span>
+
+<span class="sd">                :param capsule_coords: Dictionnaire des coordonnées à assigner.</span>
+<span class="sd">                &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span> <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Assignation de la position actuelle aux coordonnées capsule : </span><span class="si">{</span><span class="n">capsule_coords</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_lock</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">robot_coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">calculate_robot_coords_for_capsule</span><span class="p">(</span><span class="o">**</span><span class="n">capsule_coords</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">define_position</span><span class="p">(</span><span class="o">**</span><span class="n">robot_coords</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Position du robot redéfinie avec succès.&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur lors de l&#39;assignation de la position : </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainController.move_robot_relative">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.move_robot_relative">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">move_robot_relative</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axis</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Déplace le robot d&#39;une certaine distance sur un axe donné.</span>
+
+<span class="sd">        :param axis: L&#39;axe du mouvement (&#39;X&#39;, &#39;Y&#39;, &#39;Z&#39;, &#39;THETA&#39;, &#39;PHI&#39;).</span>
+<span class="sd">        :param distance: La distance du déplacement (en mm ou degrés).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span> <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Déplacement relatif de </span><span class="si">{</span><span class="n">distance</span><span class="si">}</span><span class="s2"> sur l&#39;axe </span><span class="si">{</span><span class="n">axis</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
+        <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_execute_move_relative</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">({</span><span class="n">axis</span><span class="p">:</span> <span class="n">distance</span><span class="p">},))</span><span class="o">.</span><span class="n">start</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_execute_move_relative</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">move_dict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Méthode exécutée dans un thread pour un mouvement relatif. (Interne)&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span> <span class="k">return</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">move_relative</span><span class="p">(</span><span class="o">**</span><span class="n">move_dict</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">update_positions</span><span class="p">()</span>
+        <span class="n">axis</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">move_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Mouvement relatif terminé sur l&#39;axe </span><span class="si">{</span><span class="n">axis</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_move_completed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">robot_pos</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">capsule_pos</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MainController.move_robot_to_parking">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.move_robot_to_parking">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">move_robot_to_parking</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Déplace le robot à sa position de parking prédéfinie.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span> <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Déplacement vers la position de parking...&quot;</span><span class="p">)</span>
+        <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_execute_move_to_parking</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_execute_move_to_parking</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Méthode exécutée dans un thread pour le mouvement vers le parking. (Interne)&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span> <span class="k">return</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">go_to_parking</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Position de parking atteinte.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_move_completed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">robot_pos</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">capsule_pos</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MainController.set_robot_parking_position">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.set_robot_parking_position">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_robot_parking_position</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Définit la position actuelle de la capsule comme nouvelle position de parking.</span>
+
+<span class="sd">        La nouvelle position est sauvegardée dans le fichier de configuration.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">:</span> <span class="k">return</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">update_positions</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">set_parking</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot_config_path</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">configfile</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">configfile</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Nouvelle position de parking sauvegardée.&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ERREUR: Impossible de sauvegarder le parking: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainController.set_robot_zero_position">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.set_robot_zero_position">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_robot_zero_position</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Définit la position actuelle de la capsule comme le nouveau Zéro (0,0,0,0,0).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span> <span class="k">return</span>
+        <span class="n">capsule_zero_coords</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;X&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;THETA&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;PHI&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Assignation de la position actuelle aux coordonnées capsule Zéro.&quot;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_lock</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">robot_coords_for_zero</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">calculate_robot_coords_for_capsule</span><span class="p">(</span><span class="o">**</span><span class="n">capsule_zero_coords</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">define_position</span><span class="p">(</span><span class="o">**</span><span class="n">robot_coords_for_zero</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">update_positions</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">robot_move_completed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">robot_pos</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">capsule_pos</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Position actuelle définie comme Zéro Capsule.&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur lors de l&#39;assignation de la position Zéro : </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainController.robot_jog_continuous">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.robot_jog_continuous">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">robot_jog_continuous</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Contrôle le robot en mode &#39;jog&#39; (mouvement continu).</span>
+
+<span class="sd">        :param kwargs: Dictionnaire avec l&#39;axe comme clé et la vitesse comme valeur.</span>
+<span class="sd">                       Ex: `robot_jog_continuous(x=50, y=-20)`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span> <span class="k">return</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">jog_continuous</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainController.save_all_configurations">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.save_all_configurations">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_all_configurations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sauvegarde les configurations du robot et de PULSE dans leurs fichiers .ini respectifs.</span>
+
+<span class="sd">        Applique également certains changements à la session en cours.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Sauvegarde de la configuration robot</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_config_path</span><span class="p">:</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot_config_path</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">configfile</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">configfile</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Configuration robot sauvegardée dans </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">robot_config_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_config</span><span class="p">:</span>
+                <span class="n">controller_file_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+                <span class="n">pulse_config_path</span> <span class="o">=</span> <span class="n">controller_file_path</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s1">&#39;labshop_interface&#39;</span> <span class="o">/</span> <span class="s1">&#39;config.ini&#39;</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">pulse_config_path</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">configfile</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">pulse_config</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">configfile</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Configuration PULSE sauvegardée dans </span><span class="si">{</span><span class="n">pulse_config_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="p">:</span>
+                    <span class="n">new_save_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;PulseSettings&#39;</span><span class="p">,</span> <span class="s1">&#39;save_path_dir&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">new_save_dir</span><span class="p">:</span>
+
+                        <span class="n">cfg_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_config_path</span>
+                        <span class="n">save_abs</span> <span class="o">=</span> <span class="n">_resolve_from_config</span><span class="p">(</span><span class="n">new_save_dir</span><span class="p">,</span> <span class="n">cfg_path</span><span class="p">,</span> <span class="n">interface_name</span><span class="o">=</span><span class="s1">&#39;labshop_interface&#39;</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">set_save_directory</span><span class="p">(</span><span class="n">save_abs</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Configurations sauvegardées avec succès.&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur lors de la sauvegarde des configurations : </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ERREUR: Impossible de sauvegarder les configurations: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MainController.toggle_pulse_visibility">
+<a class="viewcode-back" href="../api_reference.html#main_controller.MainController.toggle_pulse_visibility">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">toggle_pulse_visibility</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Affiche ou cache la fenêtre de l&#39;application PULSE LabShop.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">pulse_app</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;ERREUR: L&#39;interface PULSE n&#39;est pas connectée.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># On inverse l&#39;état de visibilité actuel</span>
+            <span class="n">is_visible</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">pulse_app</span><span class="o">.</span><span class="n">Visible</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span><span class="o">.</span><span class="n">pulse_app</span><span class="o">.</span><span class="n">Visible</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">is_visible</span>
+
+            <span class="n">new_state</span> <span class="o">=</span> <span class="s2">&quot;affichée&quot;</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_visible</span> <span class="k">else</span> <span class="s2">&quot;cachée&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Fenêtre PULSE LabShop </span><span class="si">{</span><span class="n">new_state</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur lors du changement de visibilité de PULSE : </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;ERREUR: Impossible de contrôler la fenêtre PULSE.&quot;</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Droits d'auteur 2025, Antoine Riaublanc.</p>
+  </div>
+
+  Compilé avec <a href="https://www.sphinx-doc.org/">Sphinx</a> en utilisant un
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">thème</a>
+    fourni par <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

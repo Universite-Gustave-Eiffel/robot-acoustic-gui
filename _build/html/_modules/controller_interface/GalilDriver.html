@@ -1,0 +1,736 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="fr" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>controller_interface.GalilDriver &mdash; Documentation Robot Acoustic GUI 0.1.0</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=897fae25"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../_static/translations.js?v=e6b791cb"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Recherche" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            Robot Acoustic GUI
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Rechercher docs" aria-label="Rechercher docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contenu de la Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../developer_guide.html">Guide du Développeur</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api_reference.html">Référence de l’API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Robot Acoustic GUI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Code du module</a></li>
+      <li class="breadcrumb-item active">controller_interface.GalilDriver</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Code source de controller_interface.GalilDriver</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">serial</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">configparser</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="c1"># --- Constantes ---</span>
+<span class="n">AXIS_X_GANTRY_MASTER</span><span class="p">,</span> <span class="n">AXIS_X_GANTRY_SLAVE</span> <span class="o">=</span> <span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="s1">&#39;B&#39;</span>
+<span class="n">AXIS_Y_TABLE</span><span class="p">,</span> <span class="n">AXIS_Z_VERTICAL</span> <span class="o">=</span> <span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="s1">&#39;D&#39;</span>
+<span class="n">AXIS_THETA_ROTATION</span><span class="p">,</span> <span class="n">AXIS_PHI_TILT</span> <span class="o">=</span> <span class="s1">&#39;E&#39;</span><span class="p">,</span> <span class="s1">&#39;F&#39;</span>
+<span class="n">ALL_AXES_PHYSICAL</span> <span class="o">=</span> <span class="s2">&quot;ABCDEF&quot;</span>
+<span class="n">AXES_ORDER</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="s1">&#39;D&#39;</span><span class="p">,</span> <span class="s1">&#39;E&#39;</span><span class="p">,</span> <span class="s1">&#39;F&#39;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="GalilDriver">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.GalilDriver">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GalilDriver</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Gère la communication de bas niveau avec le contrôleur Galil via une liaison série.</span>
+
+<span class="sd">    Cette classe est responsable de l&#39;établissement de la connexion, de l&#39;envoi de</span>
+<span class="sd">    commandes textuelles brutes, et de la lecture des réponses. Elle n&#39;a aucune</span>
+<span class="sd">    connaissance de la cinématique du robot ou de la signification des axes.</span>
+
+<span class="sd">    :param port: Le nom du port série (ex: &#39;COM7&#39;).</span>
+<span class="sd">    :param baudrate: Le débit en bauds (ex: 38400).</span>
+<span class="sd">    :param timeout: Le timeout pour les lectures sur le port série, en secondes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="n">baudrate</span><span class="p">,</span> <span class="n">timeout</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise le driver Galil.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">port_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">baud_rate</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeout</span> <span class="o">=</span> <span class="n">port</span><span class="p">,</span> <span class="n">baudrate</span><span class="p">,</span> <span class="n">timeout</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_connected</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">echo_disabled</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;RobotApp.GalilDriver&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="GalilDriver.connect">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.GalilDriver.connect">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">connect</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Établit la connexion avec le contrôleur sur le port série.</span>
+
+<span class="sd">        Tente d&#39;ouvrir le port, vérifie la présence du prompt Galil (&#39;:&#39;),</span>
+<span class="sd">        et désactive l&#39;écho des commandes pour simplifier la communication.</span>
+
+<span class="sd">        :return: ``True`` si la connexion est établie avec succès, ``False`` sinon.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Connexion à </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">port_name</span><span class="si">}</span><span class="s2"> @ </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">baud_rate</span><span class="si">}</span><span class="s2"> bauds...&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ser</span> <span class="o">=</span> <span class="n">serial</span><span class="o">.</span><span class="n">Serial</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">port_name</span><span class="p">,</span> <span class="n">baudrate</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">baud_rate</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timeout</span><span class="p">)</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">reset_input_buffer</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">reset_output_buffer</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39;</span><span class="se">\r\r</span><span class="s1">&#39;</span><span class="p">)</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.25</span><span class="p">)</span>
+            <span class="n">initial_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">read_all</span><span class="p">()</span>
+            <span class="k">if</span> <span class="sa">b</span><span class="s1">&#39;:&#39;</span> <span class="ow">in</span> <span class="n">initial_response</span> <span class="ow">or</span> <span class="sa">b</span><span class="s1">&#39;?&#39;</span> <span class="ow">in</span> <span class="n">initial_response</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">is_connected</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_disable_echo</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Connecté avec succès au Galil sur </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">port_name</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="kc">True</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Prompt Galil non reçu. Reçu: </span><span class="si">{</span><span class="n">initial_response</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur de connexion: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="GalilDriver.disconnect">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.GalilDriver.disconnect">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">disconnect</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ferme la connexion série avec le contrôleur.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_connected</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">ser</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">is_open</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">echo_disabled</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;EO1</span><span class="se">\r</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Port série fermé.&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur à la déconnexion: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_connected</span> <span class="o">=</span> <span class="kc">False</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_disable_echo</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Envoie la commande &#39;EO0&#39; pour désactiver l&#39;écho des commandes. (Interne)&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">reset_input_buffer</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;EO0</span><span class="se">\r</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.2</span><span class="p">)</span>
+        <span class="n">response_bytes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">read_all</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">response_bytes</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39;:&#39;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">echo_disabled</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Écho désactivé.&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Réponse inattendue à EO0: </span><span class="si">{</span><span class="n">response_bytes</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="GalilDriver.send_cmd">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.GalilDriver.send_cmd">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">send_cmd</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">command</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">timeout_override</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Envoie une commande au contrôleur Galil et lit la réponse.</span>
+
+<span class="sd">        Ajoute le retour chariot &#39;\\r&#39; nécessaire à la fin de la commande.</span>
+
+<span class="sd">        :param command: La commande à envoyer (sans le &#39;\\r&#39;).</span>
+<span class="sd">        :param timeout_override: Un timeout optionnel pour cette commande spécifique.</span>
+<span class="sd">        :return: La réponse du contrôleur sous forme de chaîne de caractères,</span>
+<span class="sd">                 ou ``None`` si non connecté.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_connected</span><span class="p">:</span> <span class="k">return</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;CMD&gt; </span><span class="si">{</span><span class="n">command</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">reset_input_buffer</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">reset_output_buffer</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">((</span><span class="n">command</span> <span class="o">+</span> <span class="s1">&#39;</span><span class="se">\r</span><span class="s1">&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;ascii&#39;</span><span class="p">))</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)</span>
+        <span class="n">original_timeout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">timeout</span>
+        <span class="k">if</span> <span class="n">timeout_override</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">timeout</span> <span class="o">=</span> <span class="n">timeout_override</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response_bytes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">read_until</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39;:&#39;</span><span class="p">)</span>
+            <span class="n">response_str</span> <span class="o">=</span> <span class="n">response_bytes</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;ascii&#39;</span><span class="p">,</span> <span class="s1">&#39;ignore&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="k">if</span> <span class="s1">&#39;?&#39;</span> <span class="ow">in</span> <span class="n">response_str</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur Galil pour &#39;</span><span class="si">{</span><span class="n">command</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">response_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RSP&lt; </span><span class="si">{</span><span class="n">response_str</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">response_str</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">timeout_override</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">timeout</span> <span class="o">=</span> <span class="n">original_timeout</span></div>
+
+
+<div class="viewcode-block" id="GalilDriver.send_query">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.GalilDriver.send_query">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">send_query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">command</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Envoie une commande &quot;query&quot; (qui retourne une valeur) et parse la réponse.</span>
+
+<span class="sd">        Cette méthode est plus robuste que :meth:`send_cmd` pour les requêtes</span>
+<span class="sd">        qui doivent retourner une valeur. Elle gère les tentatives multiples</span>
+<span class="sd">        et nettoie la réponse pour ne retourner que la valeur utile.</span>
+
+<span class="sd">        :param command: La commande de requête (ex: &#39;MG _TPA&#39;).</span>
+<span class="sd">        :param retries: Le nombre de tentatives en cas de réponse invalide.</span>
+<span class="sd">        :return: La valeur retournée par le contrôleur, ou ``None`` en cas d&#39;échec.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">retries</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="n">command</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">response</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">command</span> <span class="ow">in</span> <span class="n">response</span><span class="p">:</span>
+                <span class="n">response</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\r\n</span><span class="s1">&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">response</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;?&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">response</span> <span class="ow">and</span> <span class="n">response</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Requête &#39;</span><span class="si">{</span><span class="n">command</span><span class="si">}</span><span class="s2">&#39; a retourné une réponse invalide/vide: &#39;</span><span class="si">{</span><span class="n">response</span><span class="si">}</span><span class="s2">&#39;. Tentative </span><span class="si">{</span><span class="n">attempt</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">retries</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">attempt</span> <span class="o">&lt;</span> <span class="n">retries</span><span class="p">:</span> <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span> <span class="o">+</span> <span class="mf">0.2</span> <span class="o">*</span> <span class="n">attempt</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Échec final de la requête &#39;</span><span class="si">{</span><span class="n">command</span><span class="si">}</span><span class="s2">&#39;.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="GalilDriver.get_tp_positions">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.GalilDriver.get_tp_positions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_tp_positions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axes_str</span><span class="o">=</span><span class="s2">&quot;ABCDEF&quot;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Récupère la position actuelle (en pas) de plusieurs axes.</span>
+
+<span class="sd">        Utilise la commande &#39;MG _TP...&#39; pour interroger la position des axes.</span>
+
+<span class="sd">        :param axes_str: Une chaîne contenant les lettres des axes à interroger (ex: &#39;ACD&#39;).</span>
+<span class="sd">        :return: Un dictionnaire avec les lettres des axes comme clés et leurs</span>
+<span class="sd">                 positions en pas comme valeurs, ou ``None`` en cas d&#39;échec.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">operands</span> <span class="o">=</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s2">&quot;_TP</span><span class="si">{</span><span class="n">ax</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">ax</span> <span class="ow">in</span> <span class="n">axes_str</span><span class="p">])</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;MG </span><span class="si">{</span><span class="n">operands</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">response</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">positions</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">split</span><span class="p">()]</span>
+                <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">axes_str</span><span class="p">,</span> <span class="n">positions</span><span class="p">))</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">IndexError</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur parsing _TP, réponse: &#39;</span><span class="si">{</span><span class="n">response</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="RobotController">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RobotController</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Contrôleur de haut niveau pour le robot acoustique.</span>
+
+<span class="sd">    Cette classe utilise un :class:`GalilDriver` pour communiquer avec le matériel.</span>
+<span class="sd">    Elle implémente la logique de haut niveau, y compris :</span>
+<span class="sd">    - La conversion entre unités physiques (mm, degrés) et pas moteur.</span>
+<span class="sd">    - La cinématique directe et inverse pour gérer les coordonnées &quot;capsule&quot;.</span>
+<span class="sd">    - Les commandes de mouvement complexes (absolu, relatif, parking).</span>
+<span class="sd">    - La gestion du mode &quot;jog&quot; pour le contrôle manuel.</span>
+
+<span class="sd">    :param driver: Une instance de :class:`GalilDriver` configurée.</span>
+<span class="sd">    :param config: Une instance de `configparser.ConfigParser` contenant les</span>
+<span class="sd">                   sections [RATIOS], [OFFSETS], etc.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">AXIS_MAPPING</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;X&#39;</span><span class="p">:</span> <span class="s1">&#39;A&#39;</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">:</span> <span class="s1">&#39;C&#39;</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">:</span> <span class="s1">&#39;D&#39;</span><span class="p">,</span> <span class="s1">&#39;THETA&#39;</span><span class="p">:</span> <span class="s1">&#39;E&#39;</span><span class="p">,</span> <span class="s1">&#39;PHI&#39;</span><span class="p">:</span> <span class="s1">&#39;F&#39;</span><span class="p">}</span>
+    <span class="n">AXIS_GANTRY_SLAVE</span> <span class="o">=</span> <span class="s1">&#39;B&#39;</span>
+    <span class="n">ALL_AXES</span> <span class="o">=</span> <span class="n">ALL_AXES_PHYSICAL</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">driver</span><span class="p">:</span> <span class="n">GalilDriver</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">configparser</span><span class="o">.</span><span class="n">ConfigParser</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise le contrôleur du robot.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span> <span class="o">=</span> <span class="n">driver</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">config</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;RobotApp.RobotController&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_pos</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="mf">0.0</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">AXIS_MAPPING</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;X&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_positions</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="mf">0.0</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">AXIS_MAPPING</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_moving_axes</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+
+<div class="viewcode-block" id="RobotController.connect">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.connect">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">connect</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Connecte le driver sous-jacent.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="RobotController.disconnect">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.disconnect">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">disconnect</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Déconnecte le driver sous-jacent.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">disconnect</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="RobotController.enable_motors">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.enable_motors">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">enable_motors</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Active les moteurs du robot (commande &#39;SH&#39;) et configure le mode Gantry.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Activation des moteurs...&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SH</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ALL_AXES</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Configuration du Gantry pour les axes A (maître) et B (esclave)...&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;GA ,</span><span class="si">{</span><span class="n">AXIS_X_GANTRY_MASTER</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;GR ,-1&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;GM ,1&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Gantry configuré.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RobotController.disable_motors">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.disable_motors">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">disable_motors</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Désactive les moteurs du robot (commande &#39;MO&#39;).&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="s2">&quot;ST&quot;</span><span class="p">)</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Désactivation de tous les moteurs...&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="s2">&quot;MO&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RobotController.stop_all_motion">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.stop_all_motion">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stop_all_motion</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Arrête tous les mouvements en cours de manière contrôlée (commande &#39;ST&#39;).&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Commande ST (Stop) envoyée pour tous les axes.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="s2">&quot;ST&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_moving_axes</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="RobotController.abort_all_motion">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.abort_all_motion">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">abort_all_motion</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Provoque un arrêt d&#39;urgence de tous les mouvements (commande &#39;AB&#39;).&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="s2">&quot;COMMANDE D&#39;ARRÊT D&#39;URGENCE (AB) ENVOYÉE !&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="s2">&quot;AB&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_moving_axes</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="RobotController.reset_jog_mode">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.reset_jog_mode">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset_jog_mode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Lance une réinitialisation logicielle du contrôleur Galil (commande &#39;RS&#39;).</span>
+
+<span class="sd">        Cette opération redémarre le contrôleur. La position est sauvegardée avant</span>
+<span class="sd">        le reset et restaurée après pour conserver le référentiel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Réinitialisation de l&#39;état après le mode JOG...&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ST </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ALL_AXES</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;MO </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ALL_AXES</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SH </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ALL_AXES</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;État du servo réinitialisé.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RobotController.begin_jog_mode">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.begin_jog_mode">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">begin_jog_mode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Active le mode JOG sur le contrôleur pour les mouvements continus.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Activation du mode JOG...&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;JG </span><span class="si">{</span><span class="s1">&#39;,&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="s1">&#39;0&#39;</span><span class="p">]</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="n">AXES_ORDER</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;BG </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ALL_AXES</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Mode JOG actif.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RobotController.jog_continuous">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.jog_continuous">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">jog_continuous</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Met à jour les vitesses pour le mode JOG continu.</span>
+
+<span class="sd">        :param kwargs: Dictionnaire où les clés sont les noms d&#39;axes (&#39;X&#39;, &#39;Y&#39;, etc.)</span>
+<span class="sd">                       et les valeurs sont les vitesses souhaitées en unités physiques</span>
+<span class="sd">                       (mm/s ou deg/s). Une vitesse de 0 arrête l&#39;axe.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">jg_values</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">AXES_ORDER</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">speed</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">name_up</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">name_up</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">AXIS_MAPPING</span><span class="p">:</span>
+                <span class="n">axis_letter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">AXIS_MAPPING</span><span class="p">[</span><span class="n">name_up</span><span class="p">]</span>
+                <span class="n">speed_in_steps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_steps</span><span class="p">(</span><span class="n">name_up</span><span class="p">,</span> <span class="n">speed</span><span class="p">)</span>
+                <span class="n">jg_values</span><span class="p">[</span><span class="n">AXES_ORDER</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">axis_letter</span><span class="p">)]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">speed_in_steps</span><span class="p">)</span>
+        <span class="n">cmd_jg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;JG </span><span class="si">{</span><span class="s1">&#39;,&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">jg_values</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Mise à jour vitesse Jog: </span><span class="si">{</span><span class="n">cmd_jg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="n">cmd_jg</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_to_steps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axis_name</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convertit une valeur en unités physiques (mm ou deg) en pas moteur. (Interne)&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;RATIOS&#39;</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_from_steps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axis_name</span><span class="p">,</span> <span class="n">steps</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convertit une valeur en pas moteur en unités physiques. (Interne)&quot;&quot;&quot;</span>
+        <span class="n">ratio</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;RATIOS&#39;</span><span class="p">,</span> <span class="n">axis_name</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">steps</span> <span class="o">/</span> <span class="n">ratio</span> <span class="k">if</span> <span class="n">ratio</span> <span class="o">!=</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">0.0</span>
+
+<div class="viewcode-block" id="RobotController.update_positions">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.update_positions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_positions</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Met à jour les positions internes du robot (robot et capsule).</span>
+
+<span class="sd">        Interroge le contrôleur pour les positions en pas, les convertit en</span>
+<span class="sd">        unités physiques, puis calcule la position de la capsule via la</span>
+<span class="sd">        cinématique directe.</span>
+
+<span class="sd">        :return: Un dictionnaire de la position &quot;robot&quot; ou ``None`` si la lecture échoue.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">raw_steps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">get_tp_positions</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ALL_AXES</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">raw_steps</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">letter</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">AXIS_MAPPING</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">robot_pos</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_from_steps</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">raw_steps</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">letter</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_calculate_capsule_position</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">last_positions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_pos</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_pos</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Impossible de mettre à jour les positions (réponse nulle du driver).&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_calculate_capsule_position</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calcule la position de la capsule à partir de la position du robot. (Cinématique directe)&quot;&quot;&quot;</span>
+        <span class="n">x_r</span><span class="p">,</span> <span class="n">y_r</span><span class="p">,</span> <span class="n">z_r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_pos</span><span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_pos</span><span class="p">[</span><span class="s1">&#39;Y&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_pos</span><span class="p">[</span><span class="s1">&#39;Z&#39;</span><span class="p">]</span>
+        <span class="n">theta_rad</span><span class="p">,</span> <span class="n">phi_rad</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot_pos</span><span class="p">[</span><span class="s1">&#39;THETA&#39;</span><span class="p">]),</span> <span class="n">math</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot_pos</span><span class="p">[</span><span class="s1">&#39;PHI&#39;</span><span class="p">])</span>
+
+        <span class="n">offsets</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;OFFSETS&#39;</span><span class="p">]</span>
+        <span class="n">corr_t_x</span> <span class="o">=</span> <span class="n">offsets</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;correction_theta_x&#39;</span><span class="p">)</span>
+        <span class="n">corr_t_y</span> <span class="o">=</span> <span class="n">offsets</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;correction_theta_y&#39;</span><span class="p">)</span>
+        <span class="n">corr_t_z</span> <span class="o">=</span> <span class="n">offsets</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;correction_theta_z&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+        <span class="n">corr_p_l</span> <span class="o">=</span> <span class="n">offsets</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;correction_phi_l&#39;</span><span class="p">)</span>
+
+        <span class="n">c_theta</span><span class="p">,</span> <span class="n">s_theta</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta_rad</span><span class="p">),</span> <span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta_rad</span><span class="p">)</span>
+        <span class="n">c_phi</span><span class="p">,</span> <span class="n">s_phi</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phi_rad</span><span class="p">),</span> <span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phi_rad</span><span class="p">)</span>
+
+        <span class="c1"># Vecteur local avant rotation par Theta</span>
+        <span class="n">x_local</span> <span class="o">=</span> <span class="n">corr_t_x</span> <span class="o">+</span> <span class="n">corr_p_l</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phi_rad</span><span class="p">)</span>  <span class="c1"># sin(phi) car phi=0 -&gt; horizontal</span>
+        <span class="n">y_local</span> <span class="o">=</span> <span class="n">corr_t_y</span>
+
+        <span class="c1"># Calcul du vecteur de correction total après rotation</span>
+        <span class="n">corr_x</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_local</span> <span class="o">*</span> <span class="n">c_theta</span><span class="p">)</span> <span class="o">-</span> <span class="p">(</span><span class="n">y_local</span> <span class="o">*</span> <span class="n">s_theta</span><span class="p">)</span>
+        <span class="n">corr_y</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_local</span> <span class="o">*</span> <span class="n">s_theta</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">y_local</span> <span class="o">*</span> <span class="n">c_theta</span><span class="p">)</span>
+        <span class="n">corr_z</span> <span class="o">=</span> <span class="n">corr_t_z</span> <span class="o">-</span> <span class="p">(</span><span class="n">corr_p_l</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phi_rad</span><span class="p">))</span>  <span class="c1"># cos(phi) pour la composante Z</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos</span><span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">x_r</span> <span class="o">+</span> <span class="n">corr_x</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos</span><span class="p">[</span><span class="s1">&#39;Y&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">y_r</span> <span class="o">+</span> <span class="n">corr_y</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos</span><span class="p">[</span><span class="s1">&#39;Z&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">z_r</span> <span class="o">+</span> <span class="n">corr_z</span>
+
+<div class="viewcode-block" id="RobotController.calculate_robot_coords_for_capsule">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.calculate_robot_coords_for_capsule">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">calculate_robot_coords_for_capsule</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">Z</span><span class="p">,</span> <span class="n">THETA</span><span class="p">,</span> <span class="n">PHI</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calcule les coordonnées robot nécessaires pour atteindre une cible capsule. (Cinématique inverse)</span>
+
+<span class="sd">        Cette méthode est au cœur de la simplification de l&#39;interface. Elle prend</span>
+<span class="sd">        en entrée une position souhaitée pour le microphone et retourne les</span>
+<span class="sd">        consignes à envoyer aux moteurs.</span>
+
+<span class="sd">        :param X, Y, Z, THETA, PHI: Coordonnées de la cible &quot;capsule&quot;.</span>
+<span class="sd">        :return: Un dictionnaire des coordonnées &quot;robot&quot; correspondantes.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">theta_rad</span><span class="p">,</span> <span class="n">phi_rad</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="n">THETA</span><span class="p">),</span> <span class="n">math</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="n">PHI</span><span class="p">)</span>
+
+        <span class="n">offsets</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;OFFSETS&#39;</span><span class="p">]</span>
+        <span class="n">corr_t_x</span> <span class="o">=</span> <span class="n">offsets</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;correction_theta_x&#39;</span><span class="p">)</span>
+        <span class="n">corr_t_y</span> <span class="o">=</span> <span class="n">offsets</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;correction_theta_y&#39;</span><span class="p">)</span>
+        <span class="n">corr_t_z</span> <span class="o">=</span> <span class="n">offsets</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;correction_theta_z&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+        <span class="n">corr_p_l</span> <span class="o">=</span> <span class="n">offsets</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;correction_phi_l&#39;</span><span class="p">)</span>
+
+        <span class="n">c_theta</span><span class="p">,</span> <span class="n">s_theta</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta_rad</span><span class="p">),</span> <span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta_rad</span><span class="p">)</span>
+        <span class="n">c_phi</span><span class="p">,</span> <span class="n">s_phi</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">phi_rad</span><span class="p">),</span> <span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">phi_rad</span><span class="p">)</span>
+
+        <span class="c1"># Calcul du même vecteur de correction avec les angles cibles</span>
+        <span class="n">x_local</span> <span class="o">=</span> <span class="n">corr_t_x</span> <span class="o">+</span> <span class="n">corr_p_l</span> <span class="o">*</span> <span class="n">s_phi</span>
+        <span class="n">y_local</span> <span class="o">=</span> <span class="n">corr_t_y</span>
+
+        <span class="n">corr_x</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_local</span> <span class="o">*</span> <span class="n">c_theta</span><span class="p">)</span> <span class="o">-</span> <span class="p">(</span><span class="n">y_local</span> <span class="o">*</span> <span class="n">s_theta</span><span class="p">)</span>
+        <span class="n">corr_y</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_local</span> <span class="o">*</span> <span class="n">s_theta</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">y_local</span> <span class="o">*</span> <span class="n">c_theta</span><span class="p">)</span>
+        <span class="n">corr_z</span> <span class="o">=</span> <span class="n">corr_t_z</span> <span class="o">-</span> <span class="p">(</span><span class="n">corr_p_l</span> <span class="o">*</span> <span class="n">c_phi</span><span class="p">)</span>
+
+        <span class="c1"># Calcul inverse</span>
+        <span class="n">robot_x</span> <span class="o">=</span> <span class="n">X</span> <span class="o">-</span> <span class="n">corr_x</span>
+        <span class="n">robot_y</span> <span class="o">=</span> <span class="n">Y</span> <span class="o">-</span> <span class="n">corr_y</span>
+        <span class="n">robot_z</span> <span class="o">=</span> <span class="n">Z</span> <span class="o">-</span> <span class="n">corr_z</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;X&#39;</span><span class="p">:</span> <span class="n">robot_x</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">:</span> <span class="n">robot_y</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">:</span> <span class="n">robot_z</span><span class="p">,</span> <span class="s1">&#39;THETA&#39;</span><span class="p">:</span> <span class="n">THETA</span><span class="p">,</span> <span class="s1">&#39;PHI&#39;</span><span class="p">:</span> <span class="n">PHI</span><span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="RobotController.start_move_to">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.start_move_to">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">start_move_to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Démarre un mouvement absolu non-bloquant.</span>
+
+<span class="sd">        Envoie les commandes de position (&#39;PA&#39;) et de début de mouvement (&#39;BG&#39;)</span>
+<span class="sd">        au contrôleur, mais ne bloque pas l&#39;exécution.</span>
+
+<span class="sd">        :param kwargs: Dictionnaire des coordonnées &quot;robot&quot; cibles.</span>
+<span class="sd">        :return: Une chaîne contenant les lettres des axes en mouvement.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">axes_to_command</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">pa_values</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">AXES_ORDER</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">name_up</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">name_up</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">AXIS_MAPPING</span><span class="p">:</span>
+                <span class="n">axis_letter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">AXIS_MAPPING</span><span class="p">[</span><span class="n">name_up</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">axis_letter</span> <span class="o">==</span> <span class="n">AXIS_X_GANTRY_SLAVE</span><span class="p">:</span> <span class="k">continue</span>
+                <span class="n">steps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_steps</span><span class="p">(</span><span class="n">name_up</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+                <span class="n">pa_values</span><span class="p">[</span><span class="n">AXES_ORDER</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">axis_letter</span><span class="p">)]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">steps</span><span class="p">)</span>
+                <span class="n">axes_to_command</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">axis_letter</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">axes_to_command</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;start_move_to appelé sans coordonnées valides.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="s2">&quot;&quot;</span>
+
+        <span class="n">axes_to_wait_for</span> <span class="o">=</span> <span class="n">axes_to_command</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">AXIS_X_GANTRY_MASTER</span> <span class="ow">in</span> <span class="n">axes_to_command</span><span class="p">:</span>
+            <span class="n">axes_to_wait_for</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">AXIS_X_GANTRY_SLAVE</span><span class="p">)</span>
+
+        <span class="n">axes_to_begin_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">axes_to_command</span><span class="p">)))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_moving_axes</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">axes_to_wait_for</span><span class="p">)))</span>
+
+        <span class="n">cmd_pa</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;PA </span><span class="si">{</span><span class="s1">&#39;,&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">pa_values</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">full_command</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">cmd_pa</span><span class="si">}</span><span class="s2">;BG </span><span class="si">{</span><span class="n">axes_to_begin_str</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Démarrage Mouvement Absolu: </span><span class="si">{</span><span class="n">full_command</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="n">full_command</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_moving_axes</span></div>
+
+
+<div class="viewcode-block" id="RobotController.is_motion_complete">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.is_motion_complete">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_motion_complete</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Vérifie si le mouvement démarré avec :meth:`start_move_to` est terminé.</span>
+
+<span class="sd">        Interroge le statut de chaque axe en mouvement (`_BG...`).</span>
+
+<span class="sd">        :return: ``True`` si tous les axes ont atteint leur cible, ``False`` sinon.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_moving_axes</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_moving_axes</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_query</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;MG _BG</span><span class="si">{</span><span class="n">axis</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">response</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">float</span><span class="p">(</span><span class="n">response</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="kc">False</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+                <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Mouvement terminé pour les axes: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">active_moving_axes</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_moving_axes</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">update_positions</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_wait_for_motion_blocking</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Attend la fin du mouvement en cours de manière bloquante. (Interne)&quot;&quot;&quot;</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_motion_complete</span><span class="p">():</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
+
+<div class="viewcode-block" id="RobotController.move_to">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.move_to">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">move_to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Exécute un mouvement absolu et attend sa complétion (bloquant).</span>
+
+<span class="sd">        :param kwargs: Dictionnaire des coordonnées &quot;robot&quot; cibles.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">start_move_to</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_motion_blocking</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="RobotController.go_home">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.go_home">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">go_home</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Déplace le robot à la position d&#39;origine (0,0,0,0,0) robot.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Retour à l&#39;origine...&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">move_to</span><span class="p">(</span><span class="n">X</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">Z</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">THETA</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">PHI</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RobotController.define_current_position_as_zero">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.define_current_position_as_zero">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">define_current_position_as_zero</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Définit la position physique actuelle comme la nouvelle origine robot (0,0,0,0,0).</span>
+
+<span class="sd">        Envoie la commande &#39;DP 0,0,0,0,0,0&#39; au contrôleur Galil.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Définition position comme nouvelle origine.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="s2">&quot;DP 0,0,0,0,0,0&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">update_positions</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="RobotController.define_position">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.define_position">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">define_position</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Définit la position actuelle du robot à des coordonnées &quot;robot&quot; spécifiées (commande &#39;DP&#39;).</span>
+
+<span class="sd">        Utilisé pour la calibration ou la restauration de position après un reset.</span>
+
+<span class="sd">        :param kwargs: Dictionnaire des coordonnées &quot;robot&quot; à assigner.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dp_values</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">AXES_ORDER</span><span class="p">)</span>
+        <span class="n">has_args</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">name_up</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">name_up</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">AXIS_MAPPING</span><span class="p">:</span>
+                <span class="n">axis_letter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">AXIS_MAPPING</span><span class="p">[</span><span class="n">name_up</span><span class="p">]</span>
+                <span class="n">steps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_steps</span><span class="p">(</span><span class="n">name_up</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+                <span class="n">dp_values</span><span class="p">[</span><span class="n">AXES_ORDER</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">axis_letter</span><span class="p">)]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">steps</span><span class="p">)</span>
+                <span class="n">has_args</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">has_args</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;define_position appelée sans arguments valides.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">cmd_dp</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;DP </span><span class="si">{</span><span class="s1">&#39;,&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dp_values</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Définition de position manuelle : </span><span class="si">{</span><span class="n">cmd_dp</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">send_cmd</span><span class="p">(</span><span class="n">cmd_dp</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">update_positions</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="RobotController.set_parking">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.set_parking">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_parking</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sauvegarde la position CAPSULE actuelle comme nouvelle position de parking en mémoire.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Mise à jour de la configuration de parking en mémoire avec la position CAPSULE actuelle.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">has_section</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">):</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">add_section</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">update_positions</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;capsule_pos est vide. Impossible de définir le parking.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_x&#39;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;X&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">)</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_y&#39;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;Y&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">)</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_z&#39;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;Z&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">)</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_theta&#39;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">robot_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;THETA&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">)</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_phi&#39;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">robot_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;PHI&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">)</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RobotController.go_to_parking">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.go_to_parking">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">go_to_parking</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Déplace le robot vers la position de parking (basée sur les coordonnées capsule).&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Déplacement vers la position de parking (coordonnées capsule)...&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">parking_capsule_coords</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s1">&#39;X&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_x&#39;</span><span class="p">),</span>
+                <span class="s1">&#39;Y&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_y&#39;</span><span class="p">),</span>
+                <span class="s1">&#39;Z&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_z&#39;</span><span class="p">),</span>
+                <span class="s1">&#39;THETA&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_theta&#39;</span><span class="p">),</span>
+                <span class="s1">&#39;PHI&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_phi&#39;</span><span class="p">),</span>
+            <span class="p">}</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cible Parking Capsule: </span><span class="si">{</span><span class="n">parking_capsule_coords</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="c1"># On utilise la cinématique inverse pour trouver les coordonnées robot correspondantes</span>
+            <span class="n">robot_target_coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calculate_robot_coords_for_capsule</span><span class="p">(</span><span class="o">**</span><span class="n">parking_capsule_coords</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Déplacement robot vers: </span><span class="si">{</span><span class="n">robot_target_coords</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">move_to</span><span class="p">(</span><span class="o">**</span><span class="n">robot_target_coords</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Position de parking atteinte.&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="n">configparser</span><span class="o">.</span><span class="n">NoSectionError</span><span class="p">,</span> <span class="n">configparser</span><span class="o">.</span><span class="n">NoOptionError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Position de parking non définie ou incomplète. Erreur: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur lors du déplacement vers le parking: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RobotController.move_relative">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.move_relative">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">move_relative</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Exécute un mouvement relatif par rapport à la position robot actuelle.</span>
+
+<span class="sd">        :param kwargs: Dictionnaire avec un ou plusieurs axes et la distance</span>
+<span class="sd">                       de déplacement souhaitée (ex: `move_relative(X=10, Z=-5)`).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">kwargs</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;move_relative appelé sans arguments.&quot;</span><span class="p">);</span> <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">update_positions</span><span class="p">()</span>
+        <span class="n">target_coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_pos</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">distance</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">axis_upper</span> <span class="o">=</span> <span class="n">axis</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">axis_upper</span> <span class="ow">in</span> <span class="n">target_coords</span><span class="p">:</span>
+                <span class="n">target_coords</span><span class="p">[</span><span class="n">axis_upper</span><span class="p">]</span> <span class="o">+=</span> <span class="nb">float</span><span class="p">(</span><span class="n">distance</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Axe inconnu dans move_relative : </span><span class="si">{</span><span class="n">axis</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Déplacement relatif vers les coordonnées cibles : </span><span class="si">{</span><span class="n">target_coords</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">move_to</span><span class="p">(</span><span class="o">**</span><span class="n">target_coords</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RobotController.software_reset">
+<a class="viewcode-back" href="../../api_reference.html#controller_interface.GalilDriver.RobotController.software_reset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">software_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Lance une réinitialisation logicielle du contrôleur Galil (commande &#39;RS&#39;).</span>
+
+<span class="sd">        Cette opération redémarre le contrôleur. La position est sauvegardée avant</span>
+<span class="sd">        le reset et restaurée après pour conserver le référentiel. C&#39;est une</span>
+<span class="sd">        opération utile pour sortir de certains états d&#39;erreur ou après un</span>
+<span class="sd">        mode JOG intensif.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Lancement d&#39;une réinitialisation logicielle (RS) du contrôleur...&quot;</span><span class="p">)</span>
+        <span class="n">last_pos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_positions</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sauvegarde de la position avant reset : </span><span class="si">{</span><span class="n">last_pos</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39;RS</span><span class="se">\r</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Attente de 2 secondes pour le redémarrage du contrôleur...&quot;</span><span class="p">)</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">reset_input_buffer</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39;</span><span class="se">\r</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.2</span><span class="p">)</span>
+        <span class="n">initial_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">ser</span><span class="o">.</span><span class="n">read_all</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Réponse après reset: </span><span class="si">{</span><span class="n">initial_response</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Le contrôleur a redémarré. Re-désactivation de l&#39;écho...&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">_disable_echo</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">last_pos</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Restauration de la position : </span><span class="si">{</span><span class="n">last_pos</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">define_position</span><span class="p">(</span><span class="o">**</span><span class="n">last_pos</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Réinitialisation terminée. Réactivation des moteurs...&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">enable_motors</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Contrôleur de nouveau opérationnel.&quot;</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Droits d'auteur 2025, Antoine Riaublanc.</p>
+  </div>
+
+  Compilé avec <a href="https://www.sphinx-doc.org/">Sphinx</a> en utilisant un
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">thème</a>
+    fourni par <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,421 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="fr" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gui.config_window &mdash; Documentation Robot Acoustic GUI 0.1.0</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=897fae25"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../_static/translations.js?v=e6b791cb"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Recherche" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            Robot Acoustic GUI
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Rechercher docs" aria-label="Rechercher docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contenu de la Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../developer_guide.html">Guide du Développeur</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api_reference.html">Référence de l’API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Robot Acoustic GUI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Code du module</a></li>
+      <li class="breadcrumb-item active">gui.config_window</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Code source de gui.config_window</h1><div class="highlight"><pre>
+<span></span><span class="c1"># src/gui/config_window.py</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">configparser</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">PySide6.QtWidgets</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">QDialog</span><span class="p">,</span> <span class="n">QVBoxLayout</span><span class="p">,</span> <span class="n">QTabWidget</span><span class="p">,</span> <span class="n">QWidget</span><span class="p">,</span> <span class="n">QFormLayout</span><span class="p">,</span>
+    <span class="n">QLineEdit</span><span class="p">,</span> <span class="n">QDialogButtonBox</span><span class="p">,</span> <span class="n">QPushButton</span><span class="p">,</span> <span class="n">QFileDialog</span><span class="p">,</span>
+    <span class="n">QComboBox</span><span class="p">,</span> <span class="n">QGroupBox</span><span class="p">,</span> <span class="n">QMessageBox</span><span class="p">,</span> <span class="n">QLabel</span><span class="p">,</span> <span class="n">QScrollArea</span><span class="p">,</span> <span class="n">QCheckBox</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">PySide6.QtCore</span><span class="w"> </span><span class="kn">import</span> <span class="n">Qt</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">main_controller</span><span class="w"> </span><span class="kn">import</span> <span class="n">MainController</span>
+
+
+<div class="viewcode-block" id="ConfigWindow">
+<a class="viewcode-back" href="../../api_reference.html#gui.config_window.ConfigWindow">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ConfigWindow</span><span class="p">(</span><span class="n">QDialog</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fenêtre de dialogue pour éditer les paramètres de l&#39;application.</span>
+
+<span class="sd">    Cette fenêtre permet à l&#39;utilisateur de modifier les configurations stockées</span>
+<span class="sd">    dans les fichiers `.ini` sans avoir à éditer les fichiers texte manuellement.</span>
+<span class="sd">    Les paramètres sont organisés en onglets (Robot, PULSE).</span>
+
+<span class="sd">    La sauvegarde applique les changements à la session en cours (si possible) et</span>
+<span class="sd">    les écrit sur le disque pour les sessions futures.</span>
+
+<span class="sd">    :param controller: L&#39;instance du :class:`~src.main_controller.MainController`.</span>
+<span class="sd">    :param parent: Le widget parent (généralement la :class:`~src.gui.new_gui.MainWindow`).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">controller</span><span class="p">:</span> <span class="n">MainController</span><span class="p">,</span> <span class="n">parent</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise la fenêtre de configuration.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">parent</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">controller</span> <span class="o">=</span> <span class="n">controller</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setWindowTitle</span><span class="p">(</span><span class="s2">&quot;Configuration de l&#39;application&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setMinimumWidth</span><span class="p">(</span><span class="mi">600</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setMaximumHeight</span><span class="p">(</span><span class="mi">800</span><span class="p">)</span>
+
+        <span class="c1"># Stocker les valeurs critiques initiales pour détecter les changements</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initial_robot_port</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initial_robot_baudrate</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initial_pulse_project</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+
+        <span class="c1"># Layout principal</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">main_layout</span> <span class="o">=</span> <span class="n">QVBoxLayout</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tabs</span> <span class="o">=</span> <span class="n">QTabWidget</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">main_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tabs</span><span class="p">)</span>
+
+        <span class="c1"># Widgets conteneurs et ScrollArea pour chaque onglet</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_tab_widget</span> <span class="o">=</span> <span class="n">QWidget</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pulse_tab_widget</span> <span class="o">=</span> <span class="n">QWidget</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_scroll</span> <span class="o">=</span> <span class="n">QScrollArea</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_scroll</span><span class="o">.</span><span class="n">setWidgetResizable</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_scroll</span><span class="o">.</span><span class="n">setWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot_tab_widget</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">pulse_scroll</span> <span class="o">=</span> <span class="n">QScrollArea</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pulse_scroll</span><span class="o">.</span><span class="n">setWidgetResizable</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pulse_scroll</span><span class="o">.</span><span class="n">setWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pulse_tab_widget</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">tabs</span><span class="o">.</span><span class="n">addTab</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot_scroll</span><span class="p">,</span> <span class="s2">&quot;Configuration Robot&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tabs</span><span class="o">.</span><span class="n">addTab</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pulse_scroll</span><span class="p">,</span> <span class="s2">&quot;Configuration PULSE&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Remplir les onglets</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_create_robot_tab</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_create_pulse_tab</span><span class="p">()</span>
+
+        <span class="c1"># Boutons de la boîte de dialogue</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">button_box</span> <span class="o">=</span> <span class="n">QDialogButtonBox</span><span class="p">(</span><span class="n">QDialogButtonBox</span><span class="o">.</span><span class="n">Ok</span> <span class="o">|</span> <span class="n">QDialogButtonBox</span><span class="o">.</span><span class="n">Cancel</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">button_box</span><span class="o">.</span><span class="n">accepted</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">accept</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">button_box</span><span class="o">.</span><span class="n">rejected</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reject</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">main_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">button_box</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_load_config</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_robot_tab</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construit l&#39;onglet des paramètres liés au robot et à la séquence. (Interne)&quot;&quot;&quot;</span>
+        <span class="n">layout</span> <span class="o">=</span> <span class="n">QVBoxLayout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot_tab_widget</span><span class="p">)</span>
+
+        <span class="n">serial_group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Connexion Série&quot;</span><span class="p">)</span>
+        <span class="n">serial_layout</span> <span class="o">=</span> <span class="n">QFormLayout</span><span class="p">(</span><span class="n">serial_group</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_port</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_baudrate</span> <span class="o">=</span> <span class="n">QComboBox</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_baudrate</span><span class="o">.</span><span class="n">addItems</span><span class="p">([</span><span class="s2">&quot;9600&quot;</span><span class="p">,</span> <span class="s2">&quot;19200&quot;</span><span class="p">,</span> <span class="s2">&quot;38400&quot;</span><span class="p">,</span> <span class="s2">&quot;57600&quot;</span><span class="p">,</span> <span class="s2">&quot;115200&quot;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_timeout</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="n">serial_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Port (ex: COM7):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_port</span><span class="p">)</span>
+        <span class="n">serial_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Baudrate:&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_baudrate</span><span class="p">)</span>
+        <span class="n">serial_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Timeout (s):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_timeout</span><span class="p">)</span>
+        <span class="n">layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">serial_group</span><span class="p">)</span>
+
+        <span class="n">movement_group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Parking&quot;</span><span class="p">)</span>
+        <span class="n">movement_layout</span> <span class="o">=</span> <span class="n">QFormLayout</span><span class="p">(</span><span class="n">movement_group</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parking_x</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parking_y</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parking_z</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parking_theta</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parking_phi</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="n">movement_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Parking X (mm):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parking_x</span><span class="p">)</span>
+        <span class="n">movement_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Parking Y (mm):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parking_y</span><span class="p">)</span>
+        <span class="n">movement_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Parking Z (mm):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parking_z</span><span class="p">)</span>
+        <span class="n">movement_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Parking Theta (°):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parking_theta</span><span class="p">)</span>
+        <span class="n">movement_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Parking Phi (°):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parking_phi</span><span class="p">)</span>
+        <span class="n">layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">movement_group</span><span class="p">)</span>
+
+        <span class="n">jog_group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Vitesses de Contrôle Manuel (Jog)&quot;</span><span class="p">)</span>
+        <span class="n">jog_layout</span> <span class="o">=</span> <span class="n">QFormLayout</span><span class="p">(</span><span class="n">jog_group</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">jog_xy_speed</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">jog_z_speed</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">jog_rot_speed</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="n">jog_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Vitesse XY (mm/s):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">jog_xy_speed</span><span class="p">)</span>
+        <span class="n">jog_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Vitesse Z (mm/s):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">jog_z_speed</span><span class="p">)</span>
+        <span class="n">jog_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Vitesse Rotation (degré/s):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">jog_rot_speed</span><span class="p">)</span>
+        <span class="n">layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">jog_group</span><span class="p">)</span>
+
+        <span class="n">sequence_group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Paramètres de Séquence&quot;</span><span class="p">)</span>
+        <span class="n">sequence_layout</span> <span class="o">=</span> <span class="n">QFormLayout</span><span class="p">(</span><span class="n">sequence_group</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seq_activer_securite</span> <span class="o">=</span> <span class="n">QCheckBox</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seq_hauteur_securite</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seq_temps_stabilisation</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="n">sequence_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Activer la sécurité de déplacement :&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">seq_activer_securite</span><span class="p">)</span>
+        <span class="n">sequence_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Hauteur de sécurité (axe Z, en mm) :&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">seq_hauteur_securite</span><span class="p">)</span>
+        <span class="n">sequence_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Temps de stabilisation sur position (s) :&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">seq_temps_stabilisation</span><span class="p">)</span>
+        <span class="n">layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">sequence_group</span><span class="p">)</span>
+
+        <span class="n">calib_group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Calibration et Dynamique&quot;</span><span class="p">)</span>
+        <span class="n">calib_layout</span> <span class="o">=</span> <span class="n">QFormLayout</span><span class="p">(</span><span class="n">calib_group</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ratio_x</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ratio_y</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ratio_z</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ratio_theta</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ratio_phi</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">accel</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">decel</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="n">calib_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Ratio X (pas/mm):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ratio_x</span><span class="p">)</span>
+        <span class="n">calib_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Ratio Y (pas/mm):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ratio_y</span><span class="p">)</span>
+        <span class="n">calib_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Ratio Z (pas/mm):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ratio_z</span><span class="p">)</span>
+        <span class="n">calib_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Ratio Theta (pas/°):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ratio_theta</span><span class="p">)</span>
+        <span class="n">calib_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Ratio Phi (pas/°):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ratio_phi</span><span class="p">)</span>
+        <span class="n">calib_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Accélération (pas/s²):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">accel</span><span class="p">)</span>
+        <span class="n">calib_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Décélération (pas/s²):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">decel</span><span class="p">)</span>
+        <span class="n">layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">calib_group</span><span class="p">)</span>
+
+        <span class="n">offsets_group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Corrections Géométriques (Cinématique Capsule)&quot;</span><span class="p">)</span>
+        <span class="n">offsets_layout</span> <span class="o">=</span> <span class="n">QFormLayout</span><span class="p">(</span><span class="n">offsets_group</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">corr_theta_x</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">corr_theta_y</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">corr_theta_z</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">corr_phi_l</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="n">offsets_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Correction Theta X (mm):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">corr_theta_x</span><span class="p">)</span>
+        <span class="n">offsets_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Correction Theta Y (mm):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">corr_theta_y</span><span class="p">)</span>
+        <span class="n">offsets_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Correction Theta Z (mm):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">corr_theta_z</span><span class="p">)</span>
+        <span class="n">offsets_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;Correction Phi L (mm):&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">corr_phi_l</span><span class="p">)</span>
+        <span class="n">layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">offsets_group</span><span class="p">)</span>
+
+        <span class="n">layout</span><span class="o">.</span><span class="n">addStretch</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_pulse_tab</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construit l&#39;onglet des paramètres liés à PULSE LabShop. (Interne)&quot;&quot;&quot;</span>
+        <span class="n">layout</span> <span class="o">=</span> <span class="n">QFormLayout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pulse_tab_widget</span><span class="p">)</span>
+
+        <span class="n">paths_group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Chemins d&#39;accès PULSE&quot;</span><span class="p">)</span>
+        <span class="n">paths_layout</span> <span class="o">=</span> <span class="n">QFormLayout</span><span class="p">(</span><span class="n">paths_group</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">pulse_project_path_edit</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_project_path_btn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_path_selector</span><span class="p">(</span>
+            <span class="n">is_dir</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">file_filter</span><span class="o">=</span><span class="s2">&quot;Projet PULSE (*.pls)&quot;</span>
+        <span class="p">)</span>
+        <span class="n">paths_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="n">QLabel</span><span class="p">(</span><span class="s2">&quot;Projet PULSE (.pls):&quot;</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_project_path_edit</span><span class="p">)</span>
+        <span class="n">paths_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_project_path_btn</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">pulse_save_dir_edit</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_save_dir_btn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_path_selector</span><span class="p">(</span><span class="n">is_dir</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">paths_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="n">QLabel</span><span class="p">(</span><span class="s2">&quot;Répertoire de sauvegarde :&quot;</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_save_dir_edit</span><span class="p">)</span>
+        <span class="n">paths_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_save_dir_btn</span><span class="p">)</span>
+
+
+        <span class="n">layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">paths_group</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_path_selector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">is_dir</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">file_filter</span><span class="o">=</span><span class="s2">&quot;Tous les fichiers (*)&quot;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Crée un widget composite QLineEdit + QPushButton pour la sélection de fichiers/dossiers. (Interne)&quot;&quot;&quot;</span>
+        <span class="n">line_edit</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">()</span>
+        <span class="n">browse_button</span> <span class="o">=</span> <span class="n">QPushButton</span><span class="p">(</span><span class="s2">&quot;Parcourir...&quot;</span><span class="p">)</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">browse</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">is_dir</span><span class="p">:</span>
+                <span class="n">path</span> <span class="o">=</span> <span class="n">QFileDialog</span><span class="o">.</span><span class="n">getExistingDirectory</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;Sélectionner un répertoire&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">path</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">QFileDialog</span><span class="o">.</span><span class="n">getOpenFileName</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;Sélectionner un fichier&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">file_filter</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">path</span><span class="p">:</span>
+                <span class="n">line_edit</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="se">\\</span><span class="s2">&quot;</span><span class="p">))</span>
+
+        <span class="n">browse_button</span><span class="o">.</span><span class="n">clicked</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">browse</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">line_edit</span><span class="p">,</span> <span class="n">browse_button</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_config</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Charge les valeurs actuelles depuis le contrôleur et remplit les champs de la fenêtre. (Interne)&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">config</span><span class="p">:</span>
+            <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">config</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">initial_robot_port</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;SERIAL&#39;</span><span class="p">,</span> <span class="s1">&#39;port&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">initial_robot_baudrate</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;SERIAL&#39;</span><span class="p">,</span> <span class="s1">&#39;baudrate&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;38400&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot_port</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">initial_robot_port</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot_baudrate</span><span class="o">.</span><span class="n">setCurrentText</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">initial_robot_baudrate</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot_timeout</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;SERIAL&#39;</span><span class="p">,</span> <span class="s1">&#39;timeout&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;0.5&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">parking_x</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_x&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">parking_y</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_y&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">parking_z</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_z&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">parking_theta</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_theta&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">parking_phi</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_phi&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">jog_xy_speed</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ROBOT_SPEEDS&#39;</span><span class="p">,</span> <span class="s1">&#39;jog_xy_mm_s&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;92&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">jog_z_speed</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ROBOT_SPEEDS&#39;</span><span class="p">,</span> <span class="s1">&#39;jog_z_mm_s&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;55&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">jog_rot_speed</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ROBOT_SPEEDS&#39;</span><span class="p">,</span> <span class="s1">&#39;jog_rot_deg_s&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;65&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">seq_activer_securite</span><span class="o">.</span><span class="n">setChecked</span><span class="p">(</span>
+                <span class="n">cfg</span><span class="o">.</span><span class="n">getboolean</span><span class="p">(</span><span class="s1">&#39;SEQUENCE&#39;</span><span class="p">,</span> <span class="s1">&#39;activer_securite_deplacement&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">seq_hauteur_securite</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;SEQUENCE&#39;</span><span class="p">,</span> <span class="s1">&#39;hauteur_securite_deplacement_z&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;20.0&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">seq_temps_stabilisation</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;SEQUENCE&#39;</span><span class="p">,</span> <span class="s1">&#39;temps_stabilisation_s&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;0.5&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ratio_x</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;RATIOS&#39;</span><span class="p">,</span> <span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ratio_y</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;RATIOS&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ratio_z</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;RATIOS&#39;</span><span class="p">,</span> <span class="s1">&#39;z&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ratio_theta</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;RATIOS&#39;</span><span class="p">,</span> <span class="s1">&#39;theta&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ratio_phi</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;RATIOS&#39;</span><span class="p">,</span> <span class="s1">&#39;phi&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">accel</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ROBOT_SPEEDS&#39;</span><span class="p">,</span> <span class="s1">&#39;accel_steps_s2&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">decel</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ROBOT_SPEEDS&#39;</span><span class="p">,</span> <span class="s1">&#39;decel_steps_s2&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">corr_theta_x</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;OFFSETS&#39;</span><span class="p">,</span> <span class="s1">&#39;correction_theta_x&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">corr_theta_y</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;OFFSETS&#39;</span><span class="p">,</span> <span class="s1">&#39;correction_theta_y&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">corr_theta_z</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;OFFSETS&#39;</span><span class="p">,</span> <span class="s1">&#39;correction_theta_z&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">corr_phi_l</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;OFFSETS&#39;</span><span class="p">,</span> <span class="s1">&#39;correction_phi_l&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">pulse_config</span><span class="p">:</span>
+            <span class="n">p_cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">pulse_config</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">initial_pulse_project</span> <span class="o">=</span> <span class="n">p_cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;PulseSettings&#39;</span><span class="p">,</span> <span class="s1">&#39;project_path&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pulse_project_path_edit</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">initial_pulse_project</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pulse_save_dir_edit</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="n">p_cfg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;PulseSettings&#39;</span><span class="p">,</span> <span class="s1">&#39;save_path_dir&#39;</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_sections</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">sections</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;S&#39;assure que les sections nécessaires existent dans un objet ConfigParser. (Interne)&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">section</span> <span class="ow">in</span> <span class="n">sections</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">cfg</span><span class="o">.</span><span class="n">has_section</span><span class="p">(</span><span class="n">section</span><span class="p">):</span>
+                <span class="n">cfg</span><span class="o">.</span><span class="n">add_section</span><span class="p">(</span><span class="n">section</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_save_config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Récupère les valeurs des champs, met à jour les objets de configuration</span>
+<span class="sd">        dans le contrôleur, et déclenche leur sauvegarde sur le disque. (Interne)</span>
+
+<span class="sd">        Détecte également si un redémarrage de l&#39;application est nécessaire.</span>
+
+<span class="sd">        :return: ``True`` si la sauvegarde a réussi, ``False`` sinon.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">restart_needed</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_port</span><span class="o">.</span><span class="n">text</span><span class="p">()</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">initial_robot_port</span> <span class="ow">or</span> \
+                <span class="bp">self</span><span class="o">.</span><span class="n">robot_baudrate</span><span class="o">.</span><span class="n">currentText</span><span class="p">()</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">initial_robot_baudrate</span> <span class="ow">or</span> \
+                <span class="bp">self</span><span class="o">.</span><span class="n">pulse_project_path_edit</span><span class="o">.</span><span class="n">text</span><span class="p">()</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">initial_pulse_project</span><span class="p">:</span>
+            <span class="n">restart_needed</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">robot_cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">config</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">robot_cfg</span><span class="p">:</span> <span class="n">robot_cfg</span> <span class="o">=</span> <span class="n">configparser</span><span class="o">.</span><span class="n">ConfigParser</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_sections</span><span class="p">(</span><span class="n">robot_cfg</span><span class="p">,</span>
+                                  <span class="p">[</span><span class="s1">&#39;SERIAL&#39;</span><span class="p">,</span> <span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;SEQUENCE&#39;</span><span class="p">,</span> <span class="s1">&#39;RATIOS&#39;</span><span class="p">,</span> <span class="s1">&#39;ROBOT_SPEEDS&#39;</span><span class="p">,</span> <span class="s1">&#39;OFFSETS&#39;</span><span class="p">])</span>
+
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;SERIAL&#39;</span><span class="p">,</span> <span class="s1">&#39;port&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_port</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;SERIAL&#39;</span><span class="p">,</span> <span class="s1">&#39;baudrate&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_baudrate</span><span class="o">.</span><span class="n">currentText</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;SERIAL&#39;</span><span class="p">,</span> <span class="s1">&#39;timeout&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">robot_timeout</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_x&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parking_x</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_y&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parking_y</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_z&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parking_z</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_theta&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parking_theta</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;CAPSULE_POSITIONS&#39;</span><span class="p">,</span> <span class="s1">&#39;parking_phi&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parking_phi</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;SEQUENCE&#39;</span><span class="p">,</span> <span class="s1">&#39;activer_securite_deplacement&#39;</span><span class="p">,</span>
+                          <span class="s1">&#39;yes&#39;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">seq_activer_securite</span><span class="o">.</span><span class="n">isChecked</span><span class="p">()</span> <span class="k">else</span> <span class="s1">&#39;no&#39;</span><span class="p">)</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;SEQUENCE&#39;</span><span class="p">,</span> <span class="s1">&#39;hauteur_securite_deplacement_z&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">seq_hauteur_securite</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;SEQUENCE&#39;</span><span class="p">,</span> <span class="s1">&#39;temps_stabilisation_s&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">seq_temps_stabilisation</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;RATIOS&#39;</span><span class="p">,</span> <span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ratio_x</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;RATIOS&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ratio_y</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;RATIOS&#39;</span><span class="p">,</span> <span class="s1">&#39;z&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ratio_z</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;RATIOS&#39;</span><span class="p">,</span> <span class="s1">&#39;theta&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ratio_theta</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;RATIOS&#39;</span><span class="p">,</span> <span class="s1">&#39;phi&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ratio_phi</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;ROBOT_SPEEDS&#39;</span><span class="p">,</span> <span class="s1">&#39;jog_xy_mm_s&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">jog_xy_speed</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;ROBOT_SPEEDS&#39;</span><span class="p">,</span> <span class="s1">&#39;jog_z_mm_s&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">jog_z_speed</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;ROBOT_SPEEDS&#39;</span><span class="p">,</span> <span class="s1">&#39;jog_rot_deg_s&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">jog_rot_speed</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;ROBOT_SPEEDS&#39;</span><span class="p">,</span> <span class="s1">&#39;accel_steps_s2&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">accel</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;ROBOT_SPEEDS&#39;</span><span class="p">,</span> <span class="s1">&#39;decel_steps_s2&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">decel</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;OFFSETS&#39;</span><span class="p">,</span> <span class="s1">&#39;correction_theta_x&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">corr_theta_x</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;OFFSETS&#39;</span><span class="p">,</span> <span class="s1">&#39;correction_theta_y&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">corr_theta_y</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;OFFSETS&#39;</span><span class="p">,</span> <span class="s1">&#39;correction_theta_z&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">corr_theta_z</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">robot_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;OFFSETS&#39;</span><span class="p">,</span> <span class="s1">&#39;correction_phi_l&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">corr_phi_l</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+
+            <span class="n">pulse_cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">pulse_config</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">pulse_cfg</span><span class="p">:</span> <span class="n">pulse_cfg</span> <span class="o">=</span> <span class="n">configparser</span><span class="o">.</span><span class="n">ConfigParser</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_sections</span><span class="p">(</span><span class="n">pulse_cfg</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;PulseSettings&#39;</span><span class="p">])</span>
+
+            <span class="n">pulse_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;PulseSettings&#39;</span><span class="p">,</span> <span class="s1">&#39;project_path&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_project_path_edit</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+            <span class="n">pulse_cfg</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s1">&#39;PulseSettings&#39;</span><span class="p">,</span> <span class="s1">&#39;save_path_dir&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pulse_save_dir_edit</span><span class="o">.</span><span class="n">text</span><span class="p">())</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">save_all_configurations</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="n">restart_needed</span><span class="p">:</span>
+                <span class="n">QMessageBox</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;Redémarrage nécessaire&quot;</span><span class="p">,</span>
+                                    <span class="s2">&quot;Configuration sauvegardée.</span><span class="se">\n\n</span><span class="s2">Certaines modifications (port, baudrate, projet PULSE) nécessitent un redémarrage complet de l&#39;application pour être prises en compte.&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">QMessageBox</span><span class="o">.</span><span class="n">information</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;Succès&quot;</span><span class="p">,</span>
+                                        <span class="s2">&quot;Configuration sauvegardée.</span><span class="se">\n</span><span class="s2">Les modifications ont été appliquées.&quot;</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">QMessageBox</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;Erreur&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Impossible de sauvegarder la configuration : </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="ConfigWindow.accept">
+<a class="viewcode-back" href="../../api_reference.html#gui.config_window.ConfigWindow.accept">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">accept</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Gère le clic sur le bouton &quot;OK&quot;.</span>
+
+<span class="sd">        Tente de sauvegarder la configuration. Si la sauvegarde réussit,</span>
+<span class="sd">        la fenêtre se ferme.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save_config</span><span class="p">():</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Droits d'auteur 2025, Antoine Riaublanc.</p>
+  </div>
+
+  Compilé avec <a href="https://www.sphinx-doc.org/">Sphinx</a> en utilisant un
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">thème</a>
+    fourni par <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

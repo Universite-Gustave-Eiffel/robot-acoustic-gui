@@ -1,0 +1,269 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="fr" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sequence_manager.sequence_manager &mdash; Documentation Robot Acoustic GUI 0.1.0</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=897fae25"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../_static/translations.js?v=e6b791cb"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Recherche" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            Robot Acoustic GUI
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Rechercher docs" aria-label="Rechercher docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contenu de la Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../developer_guide.html">Guide du Développeur</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api_reference.html">Référence de l’API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Robot Acoustic GUI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Code du module</a></li>
+      <li class="breadcrumb-item active">sequence_manager.sequence_manager</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Code source de sequence_manager.sequence_manager</h1><div class="highlight"><pre>
+<span></span><span class="c1"># src/sequence_manager/sequence_manager.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">PySide6.QtCore</span><span class="w"> </span><span class="kn">import</span> <span class="n">QThread</span><span class="p">,</span> <span class="n">Signal</span><span class="p">,</span> <span class="n">Slot</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.states</span><span class="w"> </span><span class="kn">import</span> <span class="n">StateIdle</span><span class="p">,</span> <span class="n">StateStartMove</span><span class="p">,</span> <span class="n">StateEnd</span><span class="p">,</span> <span class="n">StateError</span>
+
+
+<div class="viewcode-block" id="SequenceManager">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.sequence_manager.SequenceManager">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SequenceManager</span><span class="p">(</span><span class="n">QThread</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Gère l&#39;exécution d&#39;une séquence de mesure dans un thread séparé.</span>
+
+<span class="sd">    Cette classe implémente une machine à états finis (FSM) pour orchestrer</span>
+<span class="sd">    le cycle de mesure : déplacement du robot, stabilisation, acquisition PULSE,</span>
+<span class="sd">    et sauvegarde. Elle communique son état à l&#39;application principale</span>
+<span class="sd">    via des signaux Qt.</span>
+
+<span class="sd">    :param robot: L&#39;instance du :class:`~src.controller_interface.GalilDriver.RobotController`.</span>
+<span class="sd">    :param pulse: L&#39;instance du :class:`~src.labshop_interface.PulseLabshopDriver.PulseLabshopDriver`.</span>
+<span class="sd">    :param points: La liste d&#39;objets :class:`~src.data_manager.Point` à traiter.</span>
+<span class="sd">    :param sequence_params: Un dictionnaire contenant les paramètres de la séquence</span>
+<span class="sd">                            (ex: hauteur de sécurité, temps de stabilisation).</span>
+<span class="sd">    :param single_shot: Si ``True``, la séquence s&#39;arrête après avoir traité un seul point.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">status_changed</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="n">active_point_changed</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">sequence_completed</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span>
+    <span class="n">start_measure_requested</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">()</span>
+    <span class="n">save_measure_requested</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+
+    <span class="c1"># Nouveau signal pour demander un arrêt doux</span>
+    <span class="n">stop_robot_requested</span> <span class="o">=</span> <span class="n">Signal</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">robot</span><span class="p">,</span> <span class="n">pulse</span><span class="p">,</span> <span class="n">points</span><span class="p">,</span> <span class="n">sequence_params</span><span class="p">,</span> <span class="n">single_shot</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise le gestionnaire de séquence.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot</span> <span class="o">=</span> <span class="n">robot</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pulse</span> <span class="o">=</span> <span class="n">pulse</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">single_shot</span> <span class="o">=</span> <span class="n">single_shot</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;points&#39;</span><span class="p">:</span> <span class="n">points</span><span class="p">,</span>
+            <span class="s1">&#39;current_index&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+            <span class="s1">&#39;robot_lock&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s1">&#39;base_filename&#39;</span><span class="p">:</span> <span class="s1">&#39;mesure&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;sequence_manager&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="p">,</span>
+            <span class="s1">&#39;sequence_params&#39;</span><span class="p">:</span> <span class="n">sequence_params</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_paused</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;RobotApp.SequenceManager&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_completed_event</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_success</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_message</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+
+<div class="viewcode-block" id="SequenceManager.on_measure_action_completed">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.sequence_manager.SequenceManager.on_measure_action_completed">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">(</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_measure_action_completed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">success</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Slot pour recevoir le résultat d&#39;une action asynchrone demandée à PULSE.</span>
+
+<span class="sd">        Le :class:`~src.main_controller.MainController` appelle ce slot lorsque PULSE a terminé</span>
+<span class="sd">        une opération (démarrage, sauvegarde). Ce mécanisme de callback via un</span>
+<span class="sd">        `threading.Event` permet à la FSM de se mettre en attente sans bloquer.</span>
+
+<span class="sd">        :param success: ``True`` si l&#39;action a réussi, ``False`` sinon.</span>
+<span class="sd">        :param message: Message de statut associé à l&#39;action.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_success</span> <span class="o">=</span> <span class="n">success</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_message</span> <span class="o">=</span> <span class="n">message</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_completed_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="SequenceManager.run">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.sequence_manager.SequenceManager.run">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Point d&#39;entrée principal du thread. Exécute la machine à états.</span>
+
+<span class="sd">        Cette méthode est appelée automatiquement lors du `start()` du thread.</span>
+<span class="sd">        Elle boucle à travers les états jusqu&#39;à atteindre un état final</span>
+<span class="sd">        (:class:`~.states.StateEnd`) ou jusqu&#39;à ce que l&#39;arrêt soit demandé.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">final_message</span> <span class="o">=</span> <span class="s2">&quot;Séquence terminée avec succès.&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_paused</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_state</span> <span class="o">=</span> <span class="n">StateStartMove</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">current_state</span><span class="p">,</span> <span class="p">(</span><span class="n">StateEnd</span><span class="p">,</span> <span class="n">StateIdle</span><span class="p">)):</span>
+
+                <span class="c1"># Gestion de la pause</span>
+                <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_paused</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span><span class="p">:</span>
+                    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.2</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span><span class="p">:</span>
+                    <span class="k">break</span>
+
+                <span class="n">point_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;current_index&#39;</span><span class="p">]</span>
+                <span class="n">total_points</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;points&#39;</span><span class="p">])</span>
+                <span class="n">status_message</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;État : </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">current_state</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">current_state</span><span class="p">,</span> <span class="p">(</span><span class="n">StateEnd</span><span class="p">,</span> <span class="n">StateIdle</span><span class="p">)):</span>
+                    <span class="n">status_message</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; | Point : </span><span class="si">{</span><span class="n">point_index</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">total_points</span><span class="si">}</span><span class="s2">&quot;</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">status_changed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">status_message</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="s2">&quot;Move&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_state</span><span class="o">.</span><span class="n">name</span> <span class="ow">or</span> <span class="s2">&quot;Measure&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_state</span><span class="o">.</span><span class="n">name</span> <span class="ow">or</span> <span class="s2">&quot;Stabilize&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_state</span><span class="o">.</span><span class="n">name</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">active_point_changed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;current_index&#39;</span><span class="p">])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">active_point_changed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+                <span class="n">next_state_class</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_state</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">current_state</span> <span class="o">=</span> <span class="n">next_state_class</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">)</span>
+
+                <span class="c1"># Tick de la machine à états</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)</span>
+
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">final_message</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Erreur inattendue dans la séquence : </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">final_message</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;error&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">final_message</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">current_state</span> <span class="o">=</span> <span class="n">StateError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">current_state</span><span class="p">,</span> <span class="n">StateError</span><span class="p">):</span>
+            <span class="n">final_message</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="s1">&#39;Erreur inconnue&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">status_changed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ERREUR : </span><span class="si">{</span><span class="n">final_message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span><span class="p">:</span>
+            <span class="n">final_message</span> <span class="o">=</span> <span class="s2">&quot;Séquence arrêtée par l&#39;utilisateur.&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">status_changed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">final_message</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">status_changed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">final_message</span><span class="p">)</span>
+
+        <span class="n">next_point_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;current_index&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_point_changed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_completed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">final_message</span><span class="p">,</span> <span class="n">next_point_index</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span> <span class="o">=</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="SequenceManager.stop">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.sequence_manager.SequenceManager.stop">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Demande l&#39;arrêt propre (doux) de la séquence.</span>
+
+<span class="sd">        Positionne un drapeau qui sera détecté par la boucle `run()` pour</span>
+<span class="sd">        terminer l&#39;exécution.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Demande d&#39;arrêt de la séquence.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_completed_event</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_completed_event</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">action_success</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">action_message</span> <span class="o">=</span> <span class="s2">&quot;Séquence arrêtée par l&#39;utilisateur&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">action_completed_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stop_robot_requested</span><span class="o">.</span><span class="n">emit</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="SequenceManager.toggle_pause">
+<a class="viewcode-back" href="../../api_reference.html#sequence_manager.sequence_manager.SequenceManager.toggle_pause">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">toggle_pause</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Met en pause ou reprend l&#39;exécution de la séquence.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_paused</span> <span class="o">=</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_paused</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="s2">&quot;en pause&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_paused</span> <span class="k">else</span> <span class="s2">&quot;reprise&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Séquence mise </span><span class="si">{</span><span class="n">state</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">status_changed</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Séquence </span><span class="si">{</span><span class="n">state</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Droits d'auteur 2025, Antoine Riaublanc.</p>
+  </div>
+
+  Compilé avec <a href="https://www.sphinx-doc.org/">Sphinx</a> en utilisant un
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">thème</a>
+    fourni par <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

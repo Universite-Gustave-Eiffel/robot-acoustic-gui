@@ -1,0 +1,582 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="fr" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gui.telecommande_window &mdash; Documentation Robot Acoustic GUI 0.1.0</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=897fae25"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../_static/translations.js?v=e6b791cb"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Recherche" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            Robot Acoustic GUI
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Rechercher docs" aria-label="Rechercher docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contenu de la Documentation:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../developer_guide.html">Guide du Développeur</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api_reference.html">Référence de l’API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Robot Acoustic GUI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Code du module</a></li>
+      <li class="breadcrumb-item active">gui.telecommande_window</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Code source de gui.telecommande_window</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">PySide6.QtWidgets</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">QMainWindow</span><span class="p">,</span> <span class="n">QWidget</span><span class="p">,</span> <span class="n">QLabel</span><span class="p">,</span> <span class="n">QVBoxLayout</span><span class="p">,</span> <span class="n">QGridLayout</span><span class="p">,</span> <span class="n">QFrame</span><span class="p">,</span>
+    <span class="n">QLineEdit</span><span class="p">,</span> <span class="n">QSpinBox</span><span class="p">,</span> <span class="n">QPushButton</span><span class="p">,</span> <span class="n">QFormLayout</span><span class="p">,</span> <span class="n">QGroupBox</span><span class="p">,</span> <span class="n">QHBoxLayout</span><span class="p">,</span>
+    <span class="n">QMessageBox</span><span class="p">,</span> <span class="n">QToolBar</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">PySide6.QtGui</span><span class="w"> </span><span class="kn">import</span> <span class="n">QIcon</span><span class="p">,</span> <span class="n">QAction</span><span class="p">,</span> <span class="n">QKeyEvent</span><span class="p">,</span> <span class="n">QCloseEvent</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">PySide6.QtCore</span><span class="w"> </span><span class="kn">import</span> <span class="n">Slot</span><span class="p">,</span> <span class="n">Qt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">configparser</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">gui.resource_manager</span><span class="w"> </span><span class="kn">import</span> <span class="n">ResourceManager</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">main_controller</span><span class="w"> </span><span class="kn">import</span> <span class="n">MainController</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gui.commands</span><span class="w"> </span><span class="kn">import</span> <span class="n">AddPointCommand</span>
+
+
+<div class="viewcode-block" id="TelecommandeWindow">
+<a class="viewcode-back" href="../../api_reference.html#gui.telecommande_window.TelecommandeWindow">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TelecommandeWindow</span><span class="p">(</span><span class="n">QMainWindow</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fenêtre de contrôle manuel avancé du robot.</span>
+
+<span class="sd">    Cette fenêtre offre des fonctionnalités de pilotage direct du robot,</span>
+<span class="sd">    indépendamment du séquenceur de la fenêtre principale. Elle est essentielle</span>
+<span class="sd">    pour les phases de calibration, de test et de positionnement initial.</span>
+
+<span class="sd">    Elle propose deux modes de déplacement :</span>
+<span class="sd">    - **Pas-à-pas :** Mouvements relatifs d&#39;une distance fixe.</span>
+<span class="sd">    - **Temps réel :** Mouvements continus (jog) contrôlés au clavier.</span>
+
+<span class="sd">    Elle permet également de définir les positions de référence (Zéro, Parking)</span>
+<span class="sd">    et d&#39;ajouter la position actuelle à la liste de points de la fenêtre principale.</span>
+
+<span class="sd">    :param controller: L&#39;instance du :class:`~src.main_controller.MainController`.</span>
+<span class="sd">    :param parent: Le widget parent (généralement la :class:`~src.gui.new_gui.MainWindow`).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">controller</span><span class="p">:</span> <span class="n">MainController</span><span class="p">,</span> <span class="n">parent</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialise la fenêtre de la télécommande.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">parent</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">controller</span> <span class="o">=</span> <span class="n">controller</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">main_window</span> <span class="o">=</span> <span class="n">parent</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setWindowTitle</span><span class="p">(</span><span class="s1">&#39;Télécommande du robot&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setWindowIcon</span><span class="p">(</span><span class="n">QIcon</span><span class="p">(</span><span class="n">ResourceManager</span><span class="o">.</span><span class="n">get_icon_path</span><span class="p">(</span><span class="s1">&#39;joystick.png&#39;</span><span class="p">)))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setGeometry</span><span class="p">(</span><span class="mi">200</span><span class="p">,</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">750</span><span class="p">,</span> <span class="mi">600</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">robot_pos_widgets</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos_widgets</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">jog_widgets</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">toolbar_actions</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_first_point_button</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_control_active</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_jogs</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">key_mapping</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">Qt</span><span class="o">.</span><span class="n">Key_Up</span><span class="p">:</span> <span class="p">(</span><span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="n">Qt</span><span class="o">.</span><span class="n">Key_Down</span><span class="p">:</span> <span class="p">(</span><span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">Qt</span><span class="o">.</span><span class="n">Key_Left</span><span class="p">:</span> <span class="p">(</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">Qt</span><span class="o">.</span><span class="n">Key_Right</span><span class="p">:</span> <span class="p">(</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="n">Qt</span><span class="o">.</span><span class="n">Key_PageUp</span><span class="p">:</span> <span class="p">(</span><span class="s1">&#39;Z&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="n">Qt</span><span class="o">.</span><span class="n">Key_PageDown</span><span class="p">:</span> <span class="p">(</span><span class="s1">&#39;Z&#39;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">Qt</span><span class="o">.</span><span class="n">Key_D</span><span class="p">:</span> <span class="p">(</span><span class="s1">&#39;THETA&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="n">Qt</span><span class="o">.</span><span class="n">Key_Q</span><span class="p">:</span> <span class="p">(</span><span class="s1">&#39;THETA&#39;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">Qt</span><span class="o">.</span><span class="n">Key_Z</span><span class="p">:</span> <span class="p">(</span><span class="s1">&#39;PHI&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="n">Qt</span><span class="o">.</span><span class="n">Key_S</span><span class="p">:</span> <span class="p">(</span><span class="s1">&#39;PHI&#39;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+        <span class="p">}</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_create_ui</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot_position_updated</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">update_position_display</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot_move_completed</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">update_target_fields_after_event</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">point_list_changed</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">update_button_states</span><span class="p">)</span>
+
+        <span class="c1"># Initialiser les champs avec la position actuelle si disponible</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">last_positions</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">update_position_display</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">last_positions</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">capsule_pos</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_on_use_current_pos</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_ui</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construit l&#39;interface utilisateur de la télécommande. (Interne)&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_create_actions_and_toolbar</span><span class="p">()</span>
+
+        <span class="n">main_widget</span> <span class="o">=</span> <span class="n">QWidget</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setCentralWidget</span><span class="p">(</span><span class="n">main_widget</span><span class="p">)</span>
+        <span class="n">main_layout</span> <span class="o">=</span> <span class="n">QVBoxLayout</span><span class="p">(</span><span class="n">main_widget</span><span class="p">)</span>
+
+        <span class="n">main_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_position_display_panel</span><span class="p">())</span>
+        <span class="n">main_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_realtime_control_panel</span><span class="p">())</span>
+        <span class="n">main_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_jogging_panel</span><span class="p">())</span>
+        <span class="n">main_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_absolute_move_panel</span><span class="p">())</span>
+        <span class="n">main_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_point_creation_panel</span><span class="p">())</span>
+        <span class="n">main_layout</span><span class="o">.</span><span class="n">addStretch</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_widgets_state</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">update_button_states</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_actions_and_toolbar</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Crée la barre d&#39;outils avec les commandes de référence. (Interne)&quot;&quot;&quot;</span>
+        <span class="n">toolbar</span> <span class="o">=</span> <span class="n">QToolBar</span><span class="p">(</span><span class="s2">&quot;Commandes de Référence&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">addToolBar</span><span class="p">(</span><span class="n">toolbar</span><span class="p">)</span>
+
+        <span class="n">stop_action</span> <span class="o">=</span> <span class="n">QAction</span><span class="p">(</span><span class="n">QIcon</span><span class="p">(</span><span class="n">ResourceManager</span><span class="o">.</span><span class="n">get_icon_path</span><span class="p">(</span><span class="s1">&#39;stop.png&#39;</span><span class="p">)),</span> <span class="s2">&quot;Arrêt d&#39;Urgence&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+        <span class="n">stop_action</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">emergency_stop</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">toolbar_actions</span><span class="p">[</span><span class="s1">&#39;stop&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop_action</span>
+        <span class="n">toolbar</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="n">stop_action</span><span class="p">)</span>
+
+        <span class="n">toolbar</span><span class="o">.</span><span class="n">addSeparator</span><span class="p">()</span>
+
+        <span class="n">set_zero_action</span> <span class="o">=</span> <span class="n">QAction</span><span class="p">(</span><span class="n">QIcon</span><span class="p">(</span><span class="n">ResourceManager</span><span class="o">.</span><span class="n">get_icon_path</span><span class="p">(</span><span class="s1">&#39;set_zero.png&#39;</span><span class="p">)),</span> <span class="s2">&quot;Définir Zéro Capsule Actuel&quot;</span><span class="p">,</span>
+                                  <span class="bp">self</span><span class="p">)</span>
+        <span class="n">set_zero_action</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">set_robot_zero_position</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">toolbar_actions</span><span class="p">[</span><span class="s1">&#39;set_zero&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">set_zero_action</span>
+        <span class="n">toolbar</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="n">set_zero_action</span><span class="p">)</span>
+
+        <span class="n">set_parking_action</span> <span class="o">=</span> <span class="n">QAction</span><span class="p">(</span><span class="n">QIcon</span><span class="p">(</span><span class="n">ResourceManager</span><span class="o">.</span><span class="n">get_icon_path</span><span class="p">(</span><span class="s1">&#39;parking.png&#39;</span><span class="p">)),</span> <span class="s2">&quot;Définir Parking Actuel&quot;</span><span class="p">,</span>
+                                     <span class="bp">self</span><span class="p">)</span>
+        <span class="n">set_parking_action</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">set_robot_parking_position</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">toolbar_actions</span><span class="p">[</span><span class="s1">&#39;set_parking&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">set_parking_action</span>
+        <span class="n">toolbar</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="n">set_parking_action</span><span class="p">)</span>
+
+        <span class="n">define_pos_action</span> <span class="o">=</span> <span class="n">QAction</span><span class="p">(</span><span class="n">QIcon</span><span class="p">(</span><span class="n">ResourceManager</span><span class="o">.</span><span class="n">get_icon_path</span><span class="p">(</span><span class="s1">&#39;set_position.png&#39;</span><span class="p">)),</span> <span class="s2">&quot;Forcer Position&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+        <span class="n">define_pos_action</span><span class="o">.</span><span class="n">setStatusTip</span><span class="p">(</span>
+            <span class="s2">&quot;Définit la position physique actuelle du robot aux coordonnées capsule spécifiées dans les champs &#39;Aller à&#39;&quot;</span><span class="p">)</span>
+        <span class="n">define_pos_action</span><span class="o">.</span><span class="n">triggered</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_define_position</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">toolbar_actions</span><span class="p">[</span><span class="s1">&#39;define_pos&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">define_pos_action</span>
+        <span class="n">toolbar</span><span class="o">.</span><span class="n">addAction</span><span class="p">(</span><span class="n">define_pos_action</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_position_display_panel</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QGroupBox</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Crée le panneau affichant les positions robot et capsule actuelles. (Interne)&quot;&quot;&quot;</span>
+        <span class="n">group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Position Actuelle&quot;</span><span class="p">)</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">QGridLayout</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
+        <span class="n">headers</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;X (mm)&quot;</span><span class="p">,</span> <span class="s2">&quot;Y (mm)&quot;</span><span class="p">,</span> <span class="s2">&quot;Z (mm)&quot;</span><span class="p">,</span> <span class="s2">&quot;Theta (°)&quot;</span><span class="p">,</span> <span class="s2">&quot;Phi (°)&quot;</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">header_text</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">headers</span><span class="p">):</span> <span class="n">grid</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">QLabel</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&lt;b&gt;</span><span class="si">{</span><span class="n">header_text</span><span class="si">}</span><span class="s2">&lt;/b&gt;&quot;</span><span class="p">),</span> <span class="mi">0</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+        <span class="n">grid</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">QLabel</span><span class="p">(</span><span class="s2">&quot;&lt;b&gt;Robot:&lt;/b&gt;&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">grid</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">QLabel</span><span class="p">(</span><span class="s2">&quot;&lt;b&gt;Capsule:&lt;/b&gt;&quot;</span><span class="p">),</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">axes</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">,</span> <span class="s1">&#39;THETA&#39;</span><span class="p">,</span> <span class="s1">&#39;PHI&#39;</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">axis</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">axes</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot_pos_widgets</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">(</span><span class="s2">&quot;N/C&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot_pos_widgets</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span><span class="o">.</span><span class="n">setReadOnly</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos_widgets</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="o">=</span> <span class="n">QLineEdit</span><span class="p">(</span><span class="s2">&quot;N/C&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos_widgets</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span><span class="o">.</span><span class="n">setReadOnly</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">grid</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot_pos_widgets</span><span class="p">[</span><span class="n">axis</span><span class="p">],</span> <span class="mi">1</span><span class="p">,</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">grid</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos_widgets</span><span class="p">[</span><span class="n">axis</span><span class="p">],</span> <span class="mi">2</span><span class="p">,</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">group</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_key_label</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Crée un widget QLabel stylisé pour représenter une touche de clavier. (Interne)&quot;&quot;&quot;</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="n">QLabel</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+        <span class="n">label</span><span class="o">.</span><span class="n">setFrameStyle</span><span class="p">(</span><span class="n">QFrame</span><span class="o">.</span><span class="n">Box</span> <span class="o">|</span> <span class="n">QFrame</span><span class="o">.</span><span class="n">Raised</span><span class="p">)</span>
+        <span class="n">label</span><span class="o">.</span><span class="n">setAlignment</span><span class="p">(</span><span class="n">Qt</span><span class="o">.</span><span class="n">AlignCenter</span><span class="p">)</span>
+        <span class="n">label</span><span class="o">.</span><span class="n">setMinimumSize</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="mi">40</span><span class="p">)</span>
+        <span class="n">label</span><span class="o">.</span><span class="n">setStyleSheet</span><span class="p">(</span><span class="s2">&quot;background-color: #DDD; border-radius: 4px; font-weight: bold;&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">label</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_realtime_control_panel</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QGroupBox</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Crée le panneau pour le contrôle clavier temps réel (jog). (Interne)&quot;&quot;&quot;</span>
+        <span class="n">group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Contrôle Clavier Temps Réel&quot;</span><span class="p">)</span>
+        <span class="n">main_layout</span> <span class="o">=</span> <span class="n">QVBoxLayout</span><span class="p">(</span><span class="n">group</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_control_button</span> <span class="o">=</span> <span class="n">QPushButton</span><span class="p">(</span><span class="s2">&quot;Activer le Contrôle Clavier&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_control_button</span><span class="o">.</span><span class="n">setCheckable</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_control_button</span><span class="o">.</span><span class="n">toggled</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_keyboard_control_toggled</span><span class="p">)</span>
+        <span class="n">main_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">keyboard_control_button</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_layout_widget</span> <span class="o">=</span> <span class="n">QWidget</span><span class="p">()</span>
+        <span class="n">controls_layout</span> <span class="o">=</span> <span class="n">QHBoxLayout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">keyboard_layout_widget</span><span class="p">)</span>
+        <span class="n">rotation_group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Rotations&quot;</span><span class="p">)</span>
+        <span class="n">rotation_layout</span> <span class="o">=</span> <span class="n">QGridLayout</span><span class="p">(</span><span class="n">rotation_group</span><span class="p">)</span>
+        <span class="n">rotation_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_key_label</span><span class="p">(</span><span class="s2">&quot;Z (Phi+)&quot;</span><span class="p">),</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">rotation_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_key_label</span><span class="p">(</span><span class="s2">&quot;Q (Th-)&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">rotation_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_key_label</span><span class="p">(</span><span class="s2">&quot;S (Phi-)&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">rotation_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_key_label</span><span class="p">(</span><span class="s2">&quot;D (Th+)&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">controls_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">rotation_group</span><span class="p">)</span>
+        <span class="n">altitude_group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Altitude&quot;</span><span class="p">)</span>
+        <span class="n">altitude_layout</span> <span class="o">=</span> <span class="n">QVBoxLayout</span><span class="p">(</span><span class="n">altitude_group</span><span class="p">)</span>
+        <span class="n">altitude_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_key_label</span><span class="p">(</span><span class="s2">&quot;PgUp (Z+)&quot;</span><span class="p">))</span>
+        <span class="n">altitude_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_key_label</span><span class="p">(</span><span class="s2">&quot;PgDn (Z-)&quot;</span><span class="p">))</span>
+        <span class="n">altitude_layout</span><span class="o">.</span><span class="n">addStretch</span><span class="p">()</span>
+        <span class="n">controls_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">altitude_group</span><span class="p">)</span>
+        <span class="n">translation_group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Translation&quot;</span><span class="p">)</span>
+        <span class="n">translation_layout</span> <span class="o">=</span> <span class="n">QGridLayout</span><span class="p">(</span><span class="n">translation_group</span><span class="p">)</span>
+        <span class="n">translation_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_key_label</span><span class="p">(</span><span class="s2">&quot;↑ (Y+)&quot;</span><span class="p">),</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">translation_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_key_label</span><span class="p">(</span><span class="s2">&quot;← (X-)&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">translation_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_key_label</span><span class="p">(</span><span class="s2">&quot;↓ (Y-)&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">translation_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_key_label</span><span class="p">(</span><span class="s2">&quot;→ (X+)&quot;</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">controls_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">translation_group</span><span class="p">)</span>
+        <span class="n">main_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">keyboard_layout_widget</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_layout_widget</span><span class="o">.</span><span class="n">hide</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">group</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_jogging_panel</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QGroupBox</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Crée le panneau pour les déplacements absolus en coordonnées capsule. (Interne)&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">jogging_group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Déplacements Relatifs (Pas-à-pas)&quot;</span><span class="p">)</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">QGridLayout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">jogging_group</span><span class="p">)</span>
+        <span class="n">axes</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;X&quot;</span><span class="p">,</span> <span class="s2">&quot;Y&quot;</span><span class="p">,</span> <span class="s2">&quot;Z&quot;</span><span class="p">,</span> <span class="s2">&quot;THETA&quot;</span><span class="p">,</span> <span class="s2">&quot;PHI&quot;</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">axis</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">axes</span><span class="p">):</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="n">QLabel</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&lt;b&gt;Pas </span><span class="si">{</span><span class="n">axis</span><span class="si">}</span><span class="s2">:&lt;/b&gt;&quot;</span><span class="p">)</span>
+            <span class="n">btn_minus</span> <span class="o">=</span> <span class="n">QPushButton</span><span class="p">(</span><span class="s2">&quot;-&quot;</span><span class="p">)</span>
+            <span class="n">btn_minus</span><span class="o">.</span><span class="n">setFixedWidth</span><span class="p">(</span><span class="mi">40</span><span class="p">)</span>
+            <span class="n">spin_box</span> <span class="o">=</span> <span class="n">QSpinBox</span><span class="p">()</span>
+            <span class="n">spin_box</span><span class="o">.</span><span class="n">setRange</span><span class="p">(</span><span class="o">-</span><span class="mi">3000</span><span class="p">,</span> <span class="mi">3000</span><span class="p">)</span>
+            <span class="n">spin_box</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+            <span class="n">unit</span> <span class="o">=</span> <span class="s2">&quot; mm&quot;</span> <span class="k">if</span> <span class="n">axis</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">]</span> <span class="k">else</span> <span class="s2">&quot; °&quot;</span>
+            <span class="n">spin_box</span><span class="o">.</span><span class="n">setSuffix</span><span class="p">(</span><span class="n">unit</span><span class="p">)</span>
+            <span class="n">btn_plus</span> <span class="o">=</span> <span class="n">QPushButton</span><span class="p">(</span><span class="s2">&quot;+&quot;</span><span class="p">)</span>
+            <span class="n">btn_plus</span><span class="o">.</span><span class="n">setFixedWidth</span><span class="p">(</span><span class="mi">40</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">jog_widgets</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="o">=</span> <span class="n">spin_box</span>
+            <span class="n">btn_minus</span><span class="o">.</span><span class="n">clicked</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="k">lambda</span> <span class="n">ch</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="n">axis</span><span class="p">,</span> <span class="n">s</span><span class="o">=-</span><span class="mi">1</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_on_jog</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">s</span><span class="p">))</span>
+            <span class="n">btn_plus</span><span class="o">.</span><span class="n">clicked</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="k">lambda</span> <span class="n">ch</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="n">axis</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">1</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_on_jog</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">s</span><span class="p">))</span>
+            <span class="n">grid</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">grid</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">btn_minus</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">grid</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">spin_box</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="n">grid</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">btn_plus</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">jogging_group</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_absolute_move_panel</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QGroupBox</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Crée le panneau pour l&#39;ajout de la position actuelle à la liste de points. (Interne)&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">absolute_move_group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Déplacement Absolu (Coordonnées Capsule)&quot;</span><span class="p">)</span>
+        <span class="n">layout</span> <span class="o">=</span> <span class="n">QHBoxLayout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">absolute_move_group</span><span class="p">)</span>
+        <span class="n">form_layout</span> <span class="o">=</span> <span class="n">QFormLayout</span><span class="p">()</span>
+        <span class="n">axes</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">,</span> <span class="s1">&#39;THETA&#39;</span><span class="p">,</span> <span class="s1">&#39;PHI&#39;</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="n">axes</span><span class="p">:</span>
+            <span class="n">spin_box</span> <span class="o">=</span> <span class="n">QSpinBox</span><span class="p">()</span>
+            <span class="n">spin_box</span><span class="o">.</span><span class="n">setRange</span><span class="p">(</span><span class="o">-</span><span class="mi">10000</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="o">=</span> <span class="n">spin_box</span>
+            <span class="n">unit</span> <span class="o">=</span> <span class="s2">&quot; (mm)&quot;</span> <span class="k">if</span> <span class="n">axis</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">]</span> <span class="k">else</span> <span class="s2">&quot; (°)&quot;</span>
+            <span class="n">form_layout</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="n">axis</span> <span class="o">+</span> <span class="n">unit</span><span class="p">,</span> <span class="n">spin_box</span><span class="p">)</span>
+        <span class="n">layout</span><span class="o">.</span><span class="n">addLayout</span><span class="p">(</span><span class="n">form_layout</span><span class="p">)</span>
+        <span class="n">control_layout</span> <span class="o">=</span> <span class="n">QVBoxLayout</span><span class="p">()</span>
+        <span class="n">control_layout</span><span class="o">.</span><span class="n">addStretch</span><span class="p">()</span>
+        <span class="n">use_current_button</span> <span class="o">=</span> <span class="n">QPushButton</span><span class="p">(</span><span class="n">QIcon</span><span class="p">(</span><span class="n">ResourceManager</span><span class="o">.</span><span class="n">get_icon_path</span><span class="p">(</span><span class="s1">&#39;refresh.png&#39;</span><span class="p">)),</span> <span class="s2">&quot;Position Actuelle&quot;</span><span class="p">)</span>
+        <span class="n">use_current_button</span><span class="o">.</span><span class="n">setStatusTip</span><span class="p">(</span><span class="s2">&quot;Copie la position actuelle de la capsule dans les champs de destination&quot;</span><span class="p">)</span>
+        <span class="n">go_button</span> <span class="o">=</span> <span class="n">QPushButton</span><span class="p">(</span><span class="n">QIcon</span><span class="p">(</span><span class="n">ResourceManager</span><span class="o">.</span><span class="n">get_icon_path</span><span class="p">(</span><span class="s1">&#39;play.png&#39;</span><span class="p">)),</span> <span class="s2">&quot;Aller à la position&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_first_point_button</span> <span class="o">=</span> <span class="n">QPushButton</span><span class="p">(</span><span class="n">QIcon</span><span class="p">(</span><span class="n">ResourceManager</span><span class="o">.</span><span class="n">get_icon_path</span><span class="p">(</span><span class="s1">&#39;get_first_point.png&#39;</span><span class="p">)),</span><span class="s2">&quot;Utiliser 1er Point de la liste&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_first_point_button</span><span class="o">.</span><span class="n">setStatusTip</span><span class="p">(</span><span class="s2">&quot;Copie les coordonnées du premier point de la liste dans les champs de destination&quot;</span><span class="p">)</span>
+        <span class="n">control_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">use_current_button</span><span class="p">)</span>
+        <span class="n">control_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">go_button</span><span class="p">)</span>
+        <span class="n">control_layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">use_first_point_button</span><span class="p">)</span>
+        <span class="n">control_layout</span><span class="o">.</span><span class="n">addStretch</span><span class="p">()</span>
+        <span class="n">layout</span><span class="o">.</span><span class="n">addLayout</span><span class="p">(</span><span class="n">control_layout</span><span class="p">)</span>
+        <span class="n">use_current_button</span><span class="o">.</span><span class="n">clicked</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_use_current_pos</span><span class="p">)</span>
+        <span class="n">go_button</span><span class="o">.</span><span class="n">clicked</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_go_absolute_capsule</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_first_point_button</span><span class="o">.</span><span class="n">clicked</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_use_first_point</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">absolute_move_group</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_point_creation_panel</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QGroupBox</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Crée le panneau pour l&#39;ajout de la position actuelle à la liste de points. (Interne)&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">point_creation_group</span> <span class="o">=</span> <span class="n">QGroupBox</span><span class="p">(</span><span class="s2">&quot;Ajout de Point à la Séquence&quot;</span><span class="p">)</span>
+        <span class="n">layout</span> <span class="o">=</span> <span class="n">QHBoxLayout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">point_creation_group</span><span class="p">)</span>
+        <span class="n">store_button</span> <span class="o">=</span> <span class="n">QPushButton</span><span class="p">(</span><span class="n">QIcon</span><span class="p">(</span><span class="n">ResourceManager</span><span class="o">.</span><span class="n">get_icon_path</span><span class="p">(</span><span class="s1">&#39;add.png&#39;</span><span class="p">)),</span><span class="s2">&quot;Ajouter la position capsule actuelle à la liste&quot;</span><span class="p">)</span>
+        <span class="n">store_button</span><span class="o">.</span><span class="n">clicked</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_add_point_to_list</span><span class="p">)</span>
+        <span class="n">layout</span><span class="o">.</span><span class="n">addWidget</span><span class="p">(</span><span class="n">store_button</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">point_creation_group</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_widgets_state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Active ou désactive les widgets en fonction de l&#39;état (ex: mode clavier actif). (Interne)&quot;&quot;&quot;</span>
+        <span class="n">is_locked</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_control_active</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">jogging_group</span><span class="o">.</span><span class="n">setEnabled</span><span class="p">(</span><span class="ow">not</span> <span class="n">is_locked</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">absolute_move_group</span><span class="o">.</span><span class="n">setEnabled</span><span class="p">(</span><span class="ow">not</span> <span class="n">is_locked</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">point_creation_group</span><span class="o">.</span><span class="n">setEnabled</span><span class="p">(</span><span class="ow">not</span> <span class="n">is_locked</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">toolbar_actions</span><span class="p">[</span><span class="s1">&#39;stop&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setEnabled</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">toolbar_actions</span><span class="p">[</span><span class="s1">&#39;set_zero&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setEnabled</span><span class="p">(</span><span class="ow">not</span> <span class="n">is_locked</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">toolbar_actions</span><span class="p">[</span><span class="s1">&#39;set_parking&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setEnabled</span><span class="p">(</span><span class="ow">not</span> <span class="n">is_locked</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">toolbar_actions</span><span class="p">[</span><span class="s1">&#39;define_pos&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setEnabled</span><span class="p">(</span><span class="ow">not</span> <span class="n">is_locked</span><span class="p">)</span>
+
+    <span class="nd">@Slot</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_add_point_to_list</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Slot pour ajouter la position capsule actuelle à la liste de points.</span>
+
+<span class="sd">        Crée une :class:`~src.gui.commands.AddPointCommand` et la pousse sur</span>
+<span class="sd">        la pile Undo/Redo de la fenêtre principale.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">main_window</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">point_to_add</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">add_current_position_as_point</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">point_to_add</span><span class="p">:</span>
+            <span class="n">command</span> <span class="o">=</span> <span class="n">AddPointCommand</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">main_window</span><span class="p">,</span> <span class="n">point_to_add</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">main_window</span><span class="o">.</span><span class="n">undo_stack</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="n">command</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Point ajouté à la liste depuis la télécommande.&quot;</span><span class="p">)</span>
+
+    <span class="nd">@Slot</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_use_first_point</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Slot pour charger les coordonnées du premier point de la liste dans les champs de destination.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">points</span><span class="p">:</span>
+            <span class="n">first_point</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">points</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">first_point</span><span class="o">.</span><span class="n">x</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="p">[</span><span class="s1">&#39;Y&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">first_point</span><span class="o">.</span><span class="n">y</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="p">[</span><span class="s1">&#39;Z&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">first_point</span><span class="o">.</span><span class="n">z</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="p">[</span><span class="s1">&#39;THETA&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">first_point</span><span class="o">.</span><span class="n">theta</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="p">[</span><span class="s1">&#39;PHI&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">first_point</span><span class="o">.</span><span class="n">phi</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Coordonnées du premier point chargées dans la télécommande.&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="TelecommandeWindow.update_button_states">
+<a class="viewcode-back" href="../../api_reference.html#gui.telecommande_window.TelecommandeWindow.update_button_states">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_button_states</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Met à jour l&#39;état des boutons en fonction de l&#39;état de l&#39;application (ex: présence de points).&quot;&quot;&quot;</span>
+        <span class="n">has_points</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">point_manager</span><span class="o">.</span><span class="n">points</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_first_point_button</span><span class="p">:</span>  <span class="c1"># S&#39;assurer que le bouton a bien été créé</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_first_point_button</span><span class="o">.</span><span class="n">setEnabled</span><span class="p">(</span><span class="n">has_points</span><span class="p">)</span></div>
+
+
+    <span class="nd">@Slot</span><span class="p">(</span><span class="nb">bool</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_keyboard_control_toggled</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">checked</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Active ou désactive le mode de contrôle clavier temps réel.</span>
+
+<span class="sd">        Lorsque ce mode est activé, il capture les événements clavier et envoie</span>
+<span class="sd">        des commandes de jog continues au robot.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_control_active</span> <span class="o">=</span> <span class="n">checked</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_widgets_state</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_layout_widget</span><span class="o">.</span><span class="n">setVisible</span><span class="p">(</span><span class="n">checked</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">checked</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_control_button</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="s2">&quot;Désactiver le Contrôle Clavier (FOCUS)&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">stop_all_motion</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">begin_jog_mode</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">setFocus</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_control_button</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="s2">&quot;Activer le Contrôle Clavier&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Sortie du mode JOG, réinitialisation du contrôleur...&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">software_reset</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Contrôleur réinitialisé et prêt.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">active_jogs</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_on_use_current_pos</span><span class="p">()</span>
+
+<div class="viewcode-block" id="TelecommandeWindow.update_position_display">
+<a class="viewcode-back" href="../../api_reference.html#gui.telecommande_window.TelecommandeWindow.update_position_display">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">(</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_position_display</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">robot_pos</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">capsule_pos</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Met à jour l&#39;affichage des coordonnées en temps réel.</span>
+
+<span class="sd">        :param robot_pos: Dictionnaire des coordonnées &quot;robot&quot;.</span>
+<span class="sd">        :param capsule_pos: Dictionnaire des coordonnées &quot;capsule&quot;.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">axes</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">,</span> <span class="s1">&#39;THETA&#39;</span><span class="p">,</span> <span class="s1">&#39;PHI&#39;</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="n">axes</span><span class="p">:</span>
+            <span class="c1"># Affichage des coordonnées robot (toujours depuis robot_pos)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">robot_pos_widgets</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">round</span><span class="p">(</span><span class="n">robot_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">axis</span><span class="o">.</span><span class="n">upper</span><span class="p">(),</span><span class="w"> </span><span class="mf">0.0</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Affichage des coordonnées capsule</span>
+            <span class="k">if</span> <span class="n">axis</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">]:</span>
+                <span class="c1"># Pour X, Y, Z, on prend la valeur calculée dans capsule_pos</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos_widgets</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">round</span><span class="p">(</span><span class="n">capsule_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">axis</span><span class="o">.</span><span class="n">upper</span><span class="p">(),</span><span class="w"> </span><span class="mf">0.0</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># Pour THETA et PHI</span>
+                <span class="c1"># Pour les angles, la coordonnée capsule est la même que la coordonnée robot</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos_widgets</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span><span class="o">.</span><span class="n">setText</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">round</span><span class="p">(</span><span class="n">robot_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">axis</span><span class="o">.</span><span class="n">upper</span><span class="p">(),</span><span class="w"> </span><span class="mf">0.0</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TelecommandeWindow.update_target_fields_after_event">
+<a class="viewcode-back" href="../../api_reference.html#gui.telecommande_window.TelecommandeWindow.update_target_fields_after_event">[docs]</a>
+    <span class="nd">@Slot</span><span class="p">(</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_target_fields_after_event</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">robot_pos</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">capsule_pos</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Met à jour les champs de destination après la fin d&#39;un mouvement.</span>
+
+<span class="sd">        :param robot_pos: Dictionnaire des coordonnées &quot;robot&quot; finales.</span>
+<span class="sd">        :param capsule_pos: Dictionnaire des coordonnées &quot;capsule&quot; finales.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">robot_pos</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">capsule_pos</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="p">[</span><span class="s1">&#39;X&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">capsule_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="p">[</span><span class="s1">&#39;Y&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">capsule_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="p">[</span><span class="s1">&#39;Z&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">capsule_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;Z&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="p">[</span><span class="s1">&#39;THETA&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">robot_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;THETA&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="p">[</span><span class="s1">&#39;PHI&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">robot_pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;PHI&#39;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)))</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_jog</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">sign</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Exécute un mouvement relatif (pas-à-pas). (Interne)&quot;&quot;&quot;</span>
+        <span class="n">distance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">jog_widgets</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">move_robot_relative</span><span class="p">(</span><span class="n">axis</span><span class="o">.</span><span class="n">lower</span><span class="p">(),</span> <span class="n">sign</span> <span class="o">*</span> <span class="n">distance</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_use_current_pos</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Copie la position capsule actuelle dans les champs de destination absolue.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">widget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">capsule_pos_widgets</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">current_val</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">widget</span><span class="o">.</span><span class="n">text</span><span class="p">()))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span><span class="o">.</span><span class="n">setValue</span><span class="p">(</span><span class="n">current_val</span><span class="p">)</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+                <span class="k">continue</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_go_absolute_capsule</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Lance un mouvement vers la destination absolue spécifiée.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">coords</span> <span class="o">=</span> <span class="p">{</span><span class="n">axis</span><span class="p">:</span> <span class="n">widget</span><span class="o">.</span><span class="n">value</span><span class="p">()</span> <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">widget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">move_capsule_absolute</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="n">QMessageBox</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;Erreur de saisie&quot;</span><span class="p">,</span> <span class="s2">&quot;Valeurs numériques invalides.&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_define_position</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Lance l&#39;opération de redéfinition de la position (calibration).&quot;&quot;&quot;</span>
+        <span class="n">reply</span> <span class="o">=</span> <span class="n">QMessageBox</span><span class="o">.</span><span class="n">question</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;Forcer la Position&quot;</span><span class="p">,</span>
+                                     <span class="s2">&quot;Cette action va assigner les coordonnées capsule entrées à la position physique actuelle du robot.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                                     <span class="s2">&quot;Utilisez cette fonction pour la calibration manuelle.</span><span class="se">\n\n</span><span class="s2">&quot;</span>
+                                     <span class="s2">&quot;Êtes-vous sûr de vouloir continuer ?&quot;</span><span class="p">,</span>
+                                     <span class="n">QMessageBox</span><span class="o">.</span><span class="n">Yes</span> <span class="o">|</span> <span class="n">QMessageBox</span><span class="o">.</span><span class="n">No</span><span class="p">,</span> <span class="n">QMessageBox</span><span class="o">.</span><span class="n">No</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">reply</span> <span class="o">==</span> <span class="n">QMessageBox</span><span class="o">.</span><span class="n">No</span><span class="p">:</span> <span class="k">return</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">coords</span> <span class="o">=</span> <span class="p">{</span><span class="n">axis</span><span class="p">:</span> <span class="n">widget</span><span class="o">.</span><span class="n">value</span><span class="p">()</span> <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">widget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">absolute_target_widgets</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">define_robot_position</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="n">QMessageBox</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;Erreur de saisie&quot;</span><span class="p">,</span> <span class="s2">&quot;Valeurs numériques invalides.&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="TelecommandeWindow.keyPressEvent">
+<a class="viewcode-back" href="../../api_reference.html#gui.telecommande_window.TelecommandeWindow.keyPressEvent">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">keyPressEvent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">QKeyEvent</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Capture les appuis de touches lorsque le mode de contrôle clavier est actif.</span>
+
+<span class="sd">        Traduit l&#39;événement clavier en une commande de jog et l&#39;envoie au contrôleur.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_control_active</span> <span class="ow">or</span> <span class="n">event</span><span class="o">.</span><span class="n">isAutoRepeat</span><span class="p">():</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">keyPressEvent</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">key</span> <span class="o">=</span> <span class="n">event</span><span class="o">.</span><span class="n">key</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="n">Qt</span><span class="o">.</span><span class="n">Key_W</span><span class="p">:</span> <span class="n">key</span> <span class="o">=</span> <span class="n">Qt</span><span class="o">.</span><span class="n">Key_Z</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="n">Qt</span><span class="o">.</span><span class="n">Key_A</span><span class="p">:</span> <span class="n">key</span> <span class="o">=</span> <span class="n">Qt</span><span class="o">.</span><span class="n">Key_Q</span>
+
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">key_mapping</span><span class="p">:</span>
+            <span class="n">axis</span><span class="p">,</span> <span class="n">direction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">key_mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+            <span class="n">speed_key_map</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;X&#39;</span><span class="p">:</span> <span class="s1">&#39;jog_xy_mm_s&#39;</span><span class="p">,</span> <span class="s1">&#39;Y&#39;</span><span class="p">:</span> <span class="s1">&#39;jog_xy_mm_s&#39;</span><span class="p">,</span> <span class="s1">&#39;Z&#39;</span><span class="p">:</span> <span class="s1">&#39;jog_z_mm_s&#39;</span><span class="p">,</span> <span class="s1">&#39;THETA&#39;</span><span class="p">:</span> <span class="s1">&#39;jog_rot_deg_s&#39;</span><span class="p">,</span>
+                             <span class="s1">&#39;PHI&#39;</span><span class="p">:</span> <span class="s1">&#39;jog_rot_deg_s&#39;</span><span class="p">}</span>
+            <span class="n">speed_config_key</span> <span class="o">=</span> <span class="n">speed_key_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">axis</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">speed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">getfloat</span><span class="p">(</span><span class="s1">&#39;ROBOT_SPEEDS&#39;</span><span class="p">,</span> <span class="n">speed_config_key</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_jogs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">axis</span><span class="p">)</span> <span class="o">!=</span> <span class="n">direction</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot_jog_continuous</span><span class="p">(</span><span class="o">**</span><span class="p">{</span><span class="n">axis</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="n">direction</span> <span class="o">*</span> <span class="n">speed</span><span class="p">})</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">active_jogs</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="o">=</span> <span class="n">direction</span>
+            <span class="k">except</span> <span class="p">(</span><span class="n">configparser</span><span class="o">.</span><span class="n">NoOptionError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur de config vitesse Jog pour l&#39;axe </span><span class="si">{</span><span class="n">axis</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">keyPressEvent</span><span class="p">(</span><span class="n">event</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TelecommandeWindow.keyReleaseEvent">
+<a class="viewcode-back" href="../../api_reference.html#gui.telecommande_window.TelecommandeWindow.keyReleaseEvent">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">keyReleaseEvent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">QKeyEvent</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Capture les relâchements de touches pour arrêter le mouvement de jog.</span>
+
+<span class="sd">        Envoie une commande de jog avec une vitesse de 0 à l&#39;axe correspondant.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_control_active</span> <span class="ow">or</span> <span class="n">event</span><span class="o">.</span><span class="n">isAutoRepeat</span><span class="p">():</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">keyReleaseEvent</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">key</span> <span class="o">=</span> <span class="n">event</span><span class="o">.</span><span class="n">key</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="n">Qt</span><span class="o">.</span><span class="n">Key_W</span><span class="p">:</span> <span class="n">key</span> <span class="o">=</span> <span class="n">Qt</span><span class="o">.</span><span class="n">Key_Z</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="n">Qt</span><span class="o">.</span><span class="n">Key_A</span><span class="p">:</span> <span class="n">key</span> <span class="o">=</span> <span class="n">Qt</span><span class="o">.</span><span class="n">Key_Q</span>
+
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">key_mapping</span><span class="p">:</span>
+            <span class="n">axis</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">key_mapping</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_jogs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">axis</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot_jog_continuous</span><span class="p">(</span><span class="o">**</span><span class="p">{</span><span class="n">axis</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="mi">0</span><span class="p">})</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">active_jogs</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">keyReleaseEvent</span><span class="p">(</span><span class="n">event</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TelecommandeWindow.closeEvent">
+<a class="viewcode-back" href="../../api_reference.html#gui.telecommande_window.TelecommandeWindow.closeEvent">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">closeEvent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">QCloseEvent</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Gère la fermeture de la fenêtre.</span>
+
+<span class="sd">        S&#39;assure de sortir proprement du mode JOG si celui-ci était actif,</span>
+<span class="sd">        en effectuant une réinitialisation logicielle du contrôleur pour</span>
+<span class="sd">        garantir un état stable.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_control_active</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Fermeture de la télécommande: réinitialisation du contrôleur...&quot;</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">robot</span><span class="o">.</span><span class="n">software_reset</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;Contrôleur réinitialisé et prêt.&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">keyboard_control_active</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">controller</span><span class="o">.</span><span class="n">log_message_sent</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur lors du reset à la fermeture: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">event</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Droits d'auteur 2025, Antoine Riaublanc.</p>
+  </div>
+
+  Compilé avec <a href="https://www.sphinx-doc.org/">Sphinx</a> en utilisant un
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">thème</a>
+    fourni par <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
