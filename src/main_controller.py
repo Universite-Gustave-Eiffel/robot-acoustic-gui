@@ -110,23 +110,37 @@ class MainController(QObject):
             self.robot = None
             return False
 
+    def load_pulse_config(self) -> bool:
+        """Charge la configuration de PULSE depuis son fichier .ini."""
+        try:
+            self.pulse_config, self.pulse_config_path = get_config('labshop_interface')
+            self.logger.info(f"Configuration PULSE chargée depuis : {self.pulse_config_path}")
+            return True
+        except FileNotFoundError as e:
+            self.logger.error(f"Impossible de charger la configuration PULSE : {e}", exc_info=True)
+            self.pulse_config = None
+            return False
+
     def setup_pulse(self) -> tuple[bool, str | None, str | None]:
         """
         Prépare et initialise l'interface PULSE.
+        NOTE : La configuration (self.pulse_config) doit avoir été chargée au préalable.
         Retourne (ok, erreur, proj_abs) :
           - ok : True si PULSE initialisé, False sinon
           - erreur : message d’erreur (ou None si ok)
           - proj_abs : chemin absolu du projet .pls réellement utilisé (ou None en cas d’échec)
         """
+        if not self.pulse_config:
+            return False, "La configuration PULSE n'a pas été chargée.", None
+
         try:
-            pulse_config_obj, cfg_path = get_config('labshop_interface')
-            self.pulse_config = pulse_config_obj
+            # On utilise maintenant la configuration déjà chargée
+            cfg_path = self.pulse_config_path
 
             raw_proj = self.pulse_config.get('PulseSettings', 'project_path',
                                              fallback='labshop_interface\\pulse_projects\\MinimalTest.pls')
             raw_save = self.pulse_config.get('PulseSettings', 'save_path_dir',
                                              fallback='labshop_interface\\mesures_pulse_ascii')
-            fg_name = self.pulse_config.get('PulseSettings', 'function_group_to_save', fallback='ASauver')
 
             proj_abs = _resolve_from_config(raw_proj, cfg_path, interface_name='labshop_interface')
             save_abs = _resolve_from_config(raw_save, cfg_path, interface_name='labshop_interface')
@@ -139,8 +153,7 @@ class MainController(QObject):
             # Instancier le driver avec ta signature actuelle
             self.pulse = PulseLabshopDriver(
                 project_path=proj_abs,
-                save_path_dir=save_abs,
-                function_group_name_to_save=fg_name
+                save_path_dir=save_abs
             )
 
             if self.pulse.initialize_pulse():

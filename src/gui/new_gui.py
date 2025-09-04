@@ -825,59 +825,122 @@ def run_application():
                                     "La configuration a été modifiée.\nVeuillez redémarrer l'application.")
         return -1
 
+    # --- NOUVELLE ÉTAPE : CHOIX DU PROJET PULSE ---
+    splash.showMessage("Configuration de PULSE Labshop...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+    app.processEvents()
+
+    # 1. Charger la config de PULSE pour pouvoir l'afficher et la modifier
+    if not controller.load_pulse_config():
+        splash.finish(None)
+        QMessageBox.critical(None, "Erreur Critique PULSE",
+                             "Impossible de trouver le fichier de configuration de PULSE (config.ini).\n"
+                             "L'application ne peut pas démarrer.")
+        return -1
+
+    # 2. Afficher la boîte de dialogue de choix
+    default_project = controller.pulse_config.get('PulseSettings', 'project_path', fallback="Non défini")
+
+    msg_box = QMessageBox()
+    msg_box.setIcon(QMessageBox.Question)
+    msg_box.setWindowTitle("Sélection du Projet PULSE")
+    msg_box.setText("Quel projet PULSE LabShop voulez-vous utiliser ?")
+    msg_box.setInformativeText(f"Projet par défaut : {default_project}")
+
+    default_btn = msg_box.addButton("Utiliser le projet par défaut", QMessageBox.AcceptRole)
+    choose_btn = msg_box.addButton("Choisir un autre projet...", QMessageBox.ActionRole)
+    quit_btn = msg_box.addButton("Quitter", QMessageBox.RejectRole)
+
+    msg_box.exec()
+    clicked_button = msg_box.clickedButton()
+
+    # 3. Gérer le choix de l'utilisateur
+    if clicked_button == quit_btn or clicked_button is None:
+        return -1  # L'utilisateur a cliqué sur "Quitter" ou a fermé la fenêtre
+
+    if clicked_button == choose_btn:
+        file_path, _ = QFileDialog.getOpenFileName(
+            None,
+            "Sélectionner un projet PULSE",
+            str(Path.home()),
+            "Projets PULSE (*.pls)"
+        )
+        if file_path:
+            # Mettre à jour la configuration en mémoire dans le contrôleur
+            controller.pulse_config.set('PulseSettings', 'project_path', file_path)
+            controller.log_message_sent.emit(f"Projet PULSE sélectionné manuellement : {file_path}")
+        else:
+            # L'utilisateur a annulé la sélection de fichier
+            QMessageBox.information(None, "Annulation", "Aucun projet sélectionné. L'application va se fermer.")
+            return -1
+
     # --- VÉRIFICATION / INITIALISATION DE PULSE ---
     splash.showMessage("Initialisation de l'interface PULSE Labshop...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+
+    # 4. Lancer l'initialisation de PULSE avec le bon projet
     ok, err, tried_proj = controller.setup_pulse()
 
     if not ok:
-        # Cas spécifique : projet .pls introuvable → proposer un choix (jamais "sans PULSE")
-        if err and "Projet PULSE introuvable" in err:
-            msg = QMessageBox()
-            msg.setIcon(QMessageBox.Warning)
-            msg.setWindowTitle("Projet PULSE introuvable")
-            msg.setText(
-                f"{err}\n\n"
-                "Souhaitez-vous sélectionner un fichier .pls existant "
-                "ou utiliser le projet vierge embarqué ?"
-            )
-            btn_sel = msg.addButton("Choisir un .pls…", QMessageBox.AcceptRole)
-            btn_vierge = msg.addButton("Projet vierge", QMessageBox.ActionRole)
-            msg.exec()
+        splash.finish(None)
+        QMessageBox.critical(
+            None, "Erreur d'Initialisation PULSE",
+            f"{err or 'Impossible d’initialiser PULSE LabShop.'}\n\n"
+            "Causes possibles :\n"
+            "- PULSE LabShop n'est pas installé ou la licence est absente.\n"
+            "- Le boîtier d'acquisition est éteint ou non connecté au réseau.\n"
+            "- Le projet .pls sélectionné est invalide ou corrompu."
+        )
+        return -1
 
-            if msg.clickedButton() is btn_sel:
-                pls, _ = QFileDialog.getOpenFileName(
-                    None, "Sélectionner un projet PULSE",
-                    str(Path.home()), "Projets PULSE (*.pls)"
-                )
-                if not pls:
-                    splash.finish(None)
-                    QMessageBox.information(None, "PULSE", "Aucun projet sélectionné. Fermeture.")
-                    return -1
-                # Met à jour la config en mémoire puis retente
-                controller.pulse_config.set('PulseSettings', 'project_path', pls)
+    splash.showMessage("Sélection du groupe de fonctions...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
 
-            # "Projet vierge" → on garde la valeur par défaut du INI (MinimalTest.pls résolu côté contrôleur)
+    function_groups = controller.pulse.get_available_function_groups()
+    chosen_fg = None
 
-            ok, err, _ = controller.setup_pulse()
-
-        # Autres échecs (COM/LabShop/boîtier/licence, etc.)
-        if not ok:
+    if not function_groups:
+        splash.finish(None)
+        QMessageBox.critical(
+            None,
+            "Projet PULSE incomplet",
+            "Le projet PULSE sélectionné ne contient aucun 'Function Group'.\n\n"
+            "La sauvegarde des mesures sera impossible.\n"
+            "Veuillez en ajouter un dans PULSE LabShop, enregistrer le projet, puis relancez l'application."
+        )
+        controller.disconnect_robot()  # Nettoyage
+        return -1
+    elif len(function_groups) == 1:
+        chosen_fg = function_groups[0]
+        controller.log_message_sent.emit(f"Groupe de fonctions '{chosen_fg}' sélectionné automatiquement.")
+    else:
+        # On demande à l'utilisateur de choisir
+        from PySide6.QtWidgets import QInputDialog
+        chosen_fg, ok = QInputDialog.getItem(
+            None,
+            "Sélection du Function Group",
+            "Plusieurs 'Function Groups' ont été trouvés.\n"
+            "Veuillez choisir celui dans lequel sauvegarder les mesures :",
+            function_groups,
+            0,
+            False
+        )
+        if not ok or not chosen_fg:
+            # L'utilisateur a annulé
             splash.finish(None)
-            QMessageBox.critical(
-                None, "Erreur d'Initialisation PULSE",
-                f"{err or 'Impossible d’initialiser PULSE LabShop.'}\n\n"
-                "Causes possibles :\n"
-                "- PULSE LabShop n'est pas installé ou la licence est absente.\n"
-                "- Le boîtier d'acquisition est éteint ou non connecté au réseau.\n"
-                "- Problème de configuration réseau."
-            )
+            QMessageBox.information(None, "Annulation",
+                                    "Aucun groupe de fonctions sélectionné. L'application va se fermer.")
+            controller.disconnect_robot()  # Nettoyage
             return -1
+
+    # On configure le driver avec le groupe choisi
+    if not controller.pulse.set_function_group_by_name(chosen_fg):
+        splash.finish(None)
+        QMessageBox.critical(None, "Erreur interne", "Impossible de configurer le groupe de fonctions sélectionné.")
+        controller.disconnect_robot()  # Nettoyage
+        return -1
 
     # --- DÉMARRAGE NORMAL ---
     splash.showMessage("Chargement de l'interface...", Qt.AlignBottom | Qt.AlignCenter, Qt.white)
     fenetre = MainWindow(controller=controller)
     fenetre.setup_controller_and_signals()
-    # Optionnel : si certains modules s'attendent à controller.gui
     try:
         controller.gui = fenetre
     except Exception:

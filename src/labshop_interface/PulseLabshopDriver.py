@@ -111,16 +111,14 @@ class PulseLabshopDriver:
     pour une interaction robuste et asynchrone.
     """
 
-    def __init__(self, project_path=None, save_path_dir=None, function_group_name_to_save="ASauver"):
+    def __init__(self, project_path=None, save_path_dir=None):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.project_path_to_load = project_path if project_path else os.path.join(script_dir, "pulse_projects",
                                                                                    "MinimalTest.pls")
         self.save_path_dir = save_path_dir if save_path_dir else os.path.join(script_dir, "mesures_pulse_ascii")
-        self.function_group_name_to_save_param = function_group_name_to_save
 
         logger.info(f"Chemin du projet à charger: {self.project_path_to_load}")
         logger.info(f"Répertoire de sauvegarde des mesures: {self.save_path_dir}")
-        logger.info(f"Nom du FunctionGroup pour sauvegarde: {self.function_group_name_to_save_param}")
 
         self.pulse_app = None
         self.project = None
@@ -201,21 +199,6 @@ class PulseLabshopDriver:
             else:
                 logger.warning("ConfigurationOrganiser non disponible sur l'objet Project.")
 
-            if self.project.FunctionOrganiser:
-                fg_collection = self.project.FunctionOrganiser.FunctionGroups
-                if fg_collection and hasattr(fg_collection, 'Count') and fg_collection.Count > 0:
-                    try:
-                        self.function_group_to_save = fg_collection.Item(self.function_group_name_to_save_param)
-                        logger.info(
-                            f"FunctionGroup '{self.function_group_name_to_save_param}' trouvé pour la sauvegarde.")
-                    except pythoncom.com_error:
-                        logger.warning(
-                            f"FunctionGroup '{self.function_group_name_to_save_param}' non trouvé. Sauvegarde ASCII non possible.")
-                        self.function_group_to_save = None
-                else:
-                    logger.warning(f"Aucun FunctionGroup dans '{self.project.Name}'.")
-            else:
-                logger.warning("FunctionOrganiser non disponible.")
 
             if not self.project.MeasurementOrganiser or not hasattr(self.project.MeasurementOrganiser.Templates,
                                                                     'Count') or self.project.MeasurementOrganiser.Templates.Count == 0:
@@ -283,6 +266,49 @@ class PulseLabshopDriver:
         if hasattr(self, 'pulse_app') and self.pulse_app:
             self._close_project_and_app(ask_save=False, app_already_set=True)
         return False
+
+    def get_available_function_groups(self) -> list[str]:
+        """Retourne la liste des noms de tous les Function Groups du projet."""
+        if not self.project or not self.project.FunctionOrganiser:
+            logger.warning("Impossible de lister les Function Groups : projet non chargé.")
+            return []
+
+        fg_list = []
+        try:
+            fg_collection = self.project.FunctionOrganiser.FunctionGroups
+            if fg_collection and hasattr(fg_collection, 'Count'):
+                for i in range(1, fg_collection.Count + 1):
+                    fg = fg_collection.Item(i)
+                    if fg and hasattr(fg, 'Name'):
+                        fg_list.append(fg.Name)
+        except (pythoncom.com_error, comtypes.COMError) as e:
+            logger.error(f"Erreur COM en listant les Function Groups : {e}")
+
+        logger.info(f"Function Groups trouvés dans le projet : {fg_list}")
+        return fg_list
+
+    def set_function_group_by_name(self, name: str) -> bool:
+        """Sélectionne le Function Group à utiliser pour la sauvegarde par son nom."""
+        if not self.project or not self.project.FunctionOrganiser:
+            logger.error("Impossible de sélectionner le Function Group : projet non chargé.")
+            return False
+
+        try:
+            fg_collection = self.project.FunctionOrganiser.FunctionGroups
+            self.function_group_to_save = fg_collection.Item(name)
+            logger.info(f"Le Function Group '{name}' a été sélectionné pour la sauvegarde.")
+            return True
+        except (pythoncom.com_error, comtypes.COMError):
+            logger.error(f"Impossible de trouver ou sélectionner le Function Group nommé '{name}'.")
+            self.function_group_to_save = None
+            return False
+
+    def save_function_group_ascii(self, filename_suffix):
+        if not self.function_group_to_save:
+            logger.error(
+                "Impossible de sauvegarder (ASCII) : Aucun FunctionGroup n'a été sélectionné."
+            )
+            return False
 
     def check_hardware_connection(self) -> bool:
         """
@@ -458,7 +484,8 @@ class PulseLabshopDriver:
     def save_function_group_ascii(self, filename_suffix):
         if not self.function_group_to_save:
             logger.error(
-                f"Impossible de sauvegarder (ASCII) : FunctionGroup '{self.function_group_name_to_save_param}' non défini ou non trouvé.")
+                "Impossible de sauvegarder (ASCII) : Aucun FunctionGroup n'a été sélectionné."
+            )
             return False
         if not self.project or not self.pulse_app:
             logger.error("Impossible de sauvegarder (ASCII) : Projet ou application Pulse non disponibles.")
@@ -477,7 +504,11 @@ class PulseLabshopDriver:
 
         full_file_path = os.path.join(self.save_path_dir, filename_suffix)
 
-        fg_name_log = getattr(self.function_group_to_save, 'Name', self.function_group_name_to_save_param)
+        try:
+            fg_name_log = getattr(self.function_group_to_save, 'Name', 'Inconnu')
+        except Exception:
+            fg_name_log = "Inconnu (Erreur COM)"
+
         logger.info(f"Sauvegarde du FunctionGroup '{fg_name_log}' en ASCII vers : {full_file_path}")
         try:
             success = self.function_group_to_save.SavePulseAscii(full_file_path)
@@ -574,112 +605,3 @@ class PulseLabshopDriver:
         except Exception as e:
             logger.error(f"Erreur kill_pulse_processes: {e}")
             return False
-
-
-if __name__ == '__main__':
-    log_format = '%(asctime)s - [%(levelname)s] (%(threadName)s) %(name)s: %(message)s'
-
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(logging.Formatter(log_format))
-
-    logging.basicConfig(level=logging.DEBUG, handlers=[console_handler])
-
-    logging.getLogger('comtypes').setLevel(logging.WARNING)
-
-    try:
-        pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED)
-        logger.debug("COM initialisé pour le thread principal.")
-    except pythoncom.com_error:
-        logger.debug("COM déjà initialisé pour le thread principal.")
-        pass
-
-    pulse_driver = None
-    try:
-        # Instanciation du driver avec les chemins/noms par défaut
-        pulse_driver = PulseLabshopDriver()
-
-        if not os.path.exists(pulse_driver.project_path_to_load):
-            logger.critical(f"ERREUR: Fichier projet par défaut '{pulse_driver.project_path_to_load}' introuvable.")
-        elif pulse_driver.initialize_pulse():
-            logger.info("<<< INITIALISATION DU DRIVER TERMINÉE AVEC SUCCÈS >>>")
-            time.sleep(1)
-
-
-            def measurement_started_cb():
-                logger.info("<<< CALLBACK: Mesure démarrée ! >>>")
-
-
-            def measurement_stopped_cb():
-                logger.info("<<< CALLBACK: Mesure terminée ! >>>")
-
-
-            pulse_driver.on_measurement_started_callback = measurement_started_cb
-            pulse_driver.on_measurement_stopped_callback = measurement_stopped_cb
-
-            if pulse_driver.is_template_ready_for_measurement:
-                logger.info("--- DÉBUT DE LA SÉQUENCE DE TEST ---")
-
-                logger.info("==> Étape 1: Autorange...")
-                if pulse_driver.autorange():
-                    logger.info("==> Autorange réussi.")
-
-                    logger.info("==> Étape 2: Démarrage de la mesure...")
-                    if pulse_driver.start_measurement():
-                        timeout_start = 30
-                        start_time_wait = time.time()
-                        while not pulse_driver.is_measurement_active and (
-                                time.time() - start_time_wait) < timeout_start:
-                            pythoncom.PumpWaitingMessages()
-                            time.sleep(0.1)
-
-                        if pulse_driver.is_measurement_active:
-                            logger.info("==> Mesure confirmée ACTIVE.")
-                            logger.info("    (Simulation d'une durée de mesure de 5 secondes...)")
-                            time.sleep(5)
-
-                            logger.info("==> Étape 3: Arrêt de la mesure...")
-                            pulse_driver.stop_measurement()
-                            timeout_stop = 10
-                            stop_time_wait = time.time()
-                            while not pulse_driver.is_measurement_complete and (
-                                    time.time() - stop_time_wait) < timeout_stop:
-                                pythoncom.PumpWaitingMessages()
-                                time.sleep(0.1)
-
-                            if pulse_driver.is_measurement_complete:
-                                logger.info("==> Mesure confirmée COMPLÈTE.")
-
-                                logger.info("==> Étape 4: Sauvegarde des résultats...")
-                                filename_suffix = f"Test_{pulse_driver.function_group_name_to_save_param}_{time.strftime('%Y%m%d_%H%M%S')}.txt"
-                                pulse_driver.save_function_group_ascii(filename_suffix)
-                            else:
-                                logger.error(
-                                    "Échec: Timeout après la commande Stop. La mesure n'a pas été confirmée comme complète.")
-                        else:
-                            logger.error(
-                                "Échec: Timeout après la commande Start. La mesure n'a pas été confirmée comme active.")
-                    else:
-                        logger.error("Échec de l'envoi de la commande start_measurement.")
-                else:
-                    logger.error("Échec de la commande Autorange. Séquence de test annulée.")
-            else:
-                logger.error("Template non prêt après l'initialisation. Séquence de test annulée.")
-            time.sleep(1)
-        else:
-            logger.error("Échec de l'initialisation de PULSE.")
-
-    except Exception as e_main_test:
-        logger.critical(f"Erreur critique dans le test principal: {e_main_test}", exc_info=True)
-    finally:
-        if pulse_driver:
-            pulse_driver.close()
-
-        try:
-            if threading.current_thread() is threading.main_thread():
-                pythoncom.CoUninitialize()
-                logger.debug("COM désinitialisé pour le thread principal (fin).")
-        except Exception:
-            pass
-
-        logger.info(f"--- FIN DU TEST ---")
