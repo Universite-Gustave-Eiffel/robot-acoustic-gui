@@ -17,17 +17,23 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QIcon, QFont, QAction, QCloseEvent, QColor, QPixmap, QIntValidator, QUndoStack
 from PySide6.QtCore import Qt, QSize, Slot, QCoreApplication
 
-from src.main_controller import MainController
-from src.gui.config_window import ConfigWindow
-from src.gui.telecommande_window import TelecommandeWindow
-from src.gui.resource_manager import ResourceManager
-from src.gui.commands import AddPointCommand, DeletePointsCommand, MovePointCommand, ChangeCellCommand
-from src.gui.log_viewer_window import LogViewerWindow
+from main_controller import MainController
+from gui.config_window import ConfigWindow
+from gui.telecommande_window import TelecommandeWindow
+from gui.resource_manager import ResourceManager
+from gui.commands import AddPointCommand, DeletePointsCommand, MovePointCommand, ChangeCellCommand
+from gui.log_viewer_window import LogViewerWindow
 
 def _get_active_log_file(logger_candidates: list[str]) -> Path | None:
-    """
-    Retourne le chemin du premier fichier géré par un FileHandler
-    trouvé parmi les loggers candidats.
+    """Trouve le chemin du fichier de log actif pour une catégorie donnée.
+
+    Cette fonction utilitaire parcourt les loggers Python pour trouver le premier
+    `FileHandler` attaché à l'un des noms de logger fournis. Elle est utilisée
+    par les visionneuses de logs pour savoir quel fichier surveiller.
+
+    :param logger_candidates: Une liste de noms de loggers à inspecter
+                              (ex: ["RobotApp.RobotController", "RobotApp.GalilDriver"]).
+    :return: Un objet `Path` vers le fichier de log, ou `None` si aucun n'est trouvé.
     """
     for name in logger_candidates:
         lg = logging.getLogger(name)
@@ -47,12 +53,21 @@ ROBOT_LOG_FILE = LOG_DIR / f"robot_app_{SESSION_TS}.log"
 PULSE_LOG_FILE = LOG_DIR / f"pulse_driver_{SESSION_TS}.log"
 
 def setup_logging():
-    """
-    Configure le logging pour la session en cours :
-      - Console (INFO+)
-      - Fichier robot:  logs/robot_YYYYMMDD_HHMMSS.log
-      - Fichier pulse:  logs/pulse_YYYYMMDD_HHMMSS.log
-    Un nouveau duo de fichiers est créé à chaque lancement.
+    """Configure le système de logging pour l'ensemble de l'application.
+
+    Cette fonction doit être appelée une seule fois au démarrage de l'application.
+    Elle met en place une configuration de logging à plusieurs niveaux :
+
+    - **Root Logger** : Affiche les messages de niveau INFO et supérieur sur la console.
+    - **Logger Robot** : Redirige tous les messages (DEBUG et supérieur) provenant des
+      modules du robot (`RobotApp.GalilDriver`, `RobotApp.RobotController`, etc.)
+      vers un fichier de log dédié (ex: `logs/robot_YYYYMMDD_HHMMSS.log`).
+    - **Logger PULSE** : Redirige tous les messages (DEBUG et supérieur) provenant du
+      driver PULSE (`RobotApp.PulseLabshopDriver`) vers un autre fichier de log dédié.
+
+    Cette séparation des logs par fichier facilite grandement le diagnostic en
+    cas de problème avec un sous-système spécifique. Les fichiers de log sont
+    horodatés pour ne pas écraser les sessions précédentes.
     """
     import sys
     import logging
@@ -132,22 +147,43 @@ def setup_logging():
 
 
 class IntegerDelegate(QStyledItemDelegate):
+    """Un délégué pour éditer des entiers dans une cellule de QTableWidget.
+
+    Force la saisie de valeurs numériques entières dans les colonnes où il est appliqué.
+    """
     def createEditor(self, parent, option, index):
+        """Crée un QLineEdit avec un validateur d'entiers."""
         editor = QLineEdit(parent)
         validator = QIntValidator(parent)
         editor.setValidator(validator)
         return editor
 
     def setEditorData(self, editor, index):
+        """Remplit l'éditeur avec la valeur actuelle de la cellule."""
         value = index.model().data(index, 0)
         editor.setText(str(value))
 
     def setModelData(self, editor, model, index):
+        """Met à jour le modèle avec la nouvelle valeur de l'éditeur."""
         model.setData(index, editor.text())
 
 
 class MainWindow(QMainWindow):
+    """Fenêtre principale de l'application.
+
+    Cette classe construit l'interface utilisateur principale, y compris les menus,
+    les barres d'outils, le tableau de points et la barre d'état. Elle est
+    responsable de l'affichage des données et de la transmission des actions
+    de l'utilisateur au :class:`~src.main_controller.MainController` via des signaux.
+
+    Elle utilise un `QUndoStack` pour gérer l'historique des actions d'édition
+    (Annuler/Rétablir).
+    """
     def __init__(self, controller: MainController) -> None:
+        """Initialise la fenêtre principale.
+
+        :param controller: L'instance du contrôleur principal de l'application.
+        """
         super().__init__()
         self.controller = controller
         self.telecommande_window: Optional[TelecommandeWindow] = None
@@ -164,6 +200,10 @@ class MainWindow(QMainWindow):
         self._setup_ui()
 
     def setup_controller_and_signals(self):
+        """Connecte les signaux du MainController aux slots de la MainWindow.
+
+        Cette méthode établit le dialogue entre la logique métier et l'interface.
+        """
         self.controller.log_message_sent.connect(self.update_status_bar)
         self.controller.point_list_changed.connect(self.update_points_table)
         self.controller.document_modified_status_changed.connect(self.update_save_action_state)
@@ -177,6 +217,7 @@ class MainWindow(QMainWindow):
         self.undo_stack.cleanChanged.connect(lambda is_clean: self.controller.set_document_modified(not is_clean))
 
     def _setup_ui(self) -> None:
+        """Construit tous les composants de l'interface utilisateur."""
         self.setWindowTitle('Logiciel de Pilotage Robot')
         self.setGeometry(150, 150, 1200, 700)
         self.setWindowIcon(QIcon(ResourceManager.get_icon_path('Window-icon.png')))
@@ -192,6 +233,7 @@ class MainWindow(QMainWindow):
         self._update_actions_state()
 
     def _add_action(self, name, icon, text, tip, shortcut=None, slot=None):
+        """Crée et configure une QAction, puis l'ajoute au dictionnaire des actions. (Interne)"""
         action = QAction(QIcon(ResourceManager.get_icon_path(icon)), text, self)
         action.setStatusTip(tip)
         if shortcut: action.setShortcut(shortcut)
@@ -200,6 +242,7 @@ class MainWindow(QMainWindow):
         return action
 
     def _create_actions_and_connections(self) -> None:
+        """Crée toutes les QAction de l'application et connecte leurs signaux. (Interne)"""
         self._add_action('urgence', 'stop.png', 'Arrêt d\'Urgence', "Arrêt immédiat de tous les mouvements", 'F12',
                          self.controller.emergency_stop)
         self._add_action('nouveau', 'new_file.png', '&Nouveau', "Créer une nouvelle liste de points", 'Ctrl+N',
@@ -260,6 +303,7 @@ class MainWindow(QMainWindow):
                          "Ouvre la fenêtre des logs de l'interface PULSE", slot=self._open_pulse_log_viewer)
 
     def _create_menus(self) -> None:
+        """Crée la barre de menu et ses menus (Fichier, Édition, Outils). (Interne)"""
         menu_bar = self.menuBar()
         menu_fichier = menu_bar.addMenu('&Fichier')
         menu_fichier.addAction(self._actions['nouveau'])
@@ -277,6 +321,7 @@ class MainWindow(QMainWindow):
         menu_outils.addAction(self._actions['telecommande'])
 
     def _create_toolbars(self) -> None:
+        """Crée et remplit toutes les barres d'outils. (Interne)"""
         toolbar_file = QToolBar("Fichier")
         self.addToolBar(toolbar_file)
         toolbar_file.addAction(self._actions['nouveau'])
@@ -333,6 +378,7 @@ class MainWindow(QMainWindow):
         toolbar_edition.addAction(self._actions['move_point_down'])
 
     def _create_central_widget(self) -> None:
+        """Crée le widget central, qui contient principalement le tableau de points. (Interne)"""
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
@@ -348,6 +394,7 @@ class MainWindow(QMainWindow):
         self.points_table.itemChanged.connect(self._on_cell_changed)
 
     def _create_statusbar(self) -> None:
+        """Crée la barre d'état avec la zone de message et l'affichage des coordonnées. (Interne)"""
         status_bar = self.statusBar()
         self.status_message_label = QLabel("Prêt")
         status_bar.addWidget(self.status_message_label, 1)
@@ -366,6 +413,10 @@ class MainWindow(QMainWindow):
         status_bar.addPermanentWidget(coord_widget)
 
     def _get_table_data(self) -> list[dict]:
+        """Extrait toutes les données du tableau de points.
+
+        :return: Une liste de dictionnaires, où chaque dictionnaire représente une ligne du tableau.
+        """
         data = []
         headers = [self.points_table.horizontalHeaderItem(c).text().lower().replace("_", " ") for c in
                    range(self.points_table.columnCount())]
@@ -379,6 +430,15 @@ class MainWindow(QMainWindow):
         return data
 
     def _start_sequence_common(self, start_method):
+        """Logique commune pour le démarrage d'une séquence. (Interne)
+
+        Gère la validation (noms de fichiers manquants) et la récupération
+        de l'index de départ avant d'appeler la méthode de démarrage effective
+        du contrôleur.
+
+        :param start_method: La méthode du contrôleur à appeler pour démarrer
+                             (ex: `controller.start_full_sequence`).
+        """
         self.controller.sync_points_from_gui(self._get_table_data())
         selected_rows = {item.row() for item in self.points_table.selectedItems()}
         start_index = 0
@@ -409,14 +469,17 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_start_full_sequence_triggered(self):
+        """Slot déclenché par l'action "Démarrer Séquence"."""
         self._start_sequence_common(self.controller.start_full_sequence)
 
     @Slot()
     def _on_next_point_triggered(self):
+        """Slot déclenché par l'action "Mesurer Point Suivant"."""
         self._start_sequence_common(self.controller.start_single_point_sequence)
 
     @Slot()
     def _on_goto_selected_point_triggered(self):
+        """Slot pour déplacer le robot vers le point sélectionné dans le tableau."""
         selected_rows = {item.row() for item in self.points_table.selectedItems()}
         if len(selected_rows) != 1:
             self.update_status_bar("Veuillez sélectionner une seule ligne de destination.")
@@ -432,12 +495,19 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_goto_zero_triggered(self):
+        """Slot pour déplacer le robot à la position capsule zéro."""
         zero_coords = {'X': 0.0, 'Y': 0.0, 'Z': 0.0, 'THETA': 0.0, 'PHI': 0.0}
         self.update_status_bar("Déplacement vers le Zéro Capsule...")
         self.controller.move_capsule_absolute(zero_coords)
 
     @Slot(str)
     def _handle_sequence_state(self, status: str):
+        """Met à jour l'interface en fonction de l'état de la séquence.
+
+        Affiche le message de statut et met à jour l'état (activé/désactivé) des actions.
+
+        :param status: Le message de statut reçu du séquenceur.
+        """
         self.update_status_bar(status)
         if "Démarrage" in status:
             self._is_sequence_running = True
@@ -447,10 +517,24 @@ class MainWindow(QMainWindow):
 
     @Slot(str, int)
     def on_single_point_sequence_finished(self, final_message: str, next_point_index: int):
+        """Gère la fin d'une séquence "point unique".
+
+        Sélectionne automatiquement le point suivant dans le tableau pour faciliter
+        l'enchaînement manuel des mesures.
+
+        :param final_message: Le message de statut final.
+        :param next_point_index: L'index du point suivant à sélectionner.
+        """
         if next_point_index < self.points_table.rowCount():
             self.points_table.selectRow(next_point_index)
 
     def _update_actions_state(self):
+        """Met à jour l'état (activé/désactivé) de toutes les actions et widgets.
+
+        Cette méthode est appelée à chaque changement d'état important (début/fin
+        de séquence, changement de sélection dans le tableau) pour s'assurer
+        que l'utilisateur ne puisse cliquer que sur les boutons pertinents.
+        """
         running = self._is_sequence_running
         has_points = self.points_table.rowCount() > 0
         selected_items = self.points_table.selectedItems()
@@ -487,6 +571,12 @@ class MainWindow(QMainWindow):
 
     @Slot(int)
     def highlight_table_row(self, row_index: int):
+        """Surligne une ligne spécifique du tableau.
+
+        Utilisé par le séquenceur pour indiquer visuellement le point en cours de traitement.
+
+        :param row_index: L'index de la ligne à surligner.
+        """
         self.points_table.blockSignals(True)
         if self.current_highlighted_row != -1 and self.current_highlighted_row < self.points_table.rowCount():
             for col in range(self.points_table.columnCount()):
@@ -502,6 +592,12 @@ class MainWindow(QMainWindow):
         self.points_table.blockSignals(False)
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        """Gère l'événement de fermeture de la fenêtre.
+
+        Demande confirmation à l'utilisateur s'il y a des modifications non
+        sauvegardées et s'assure que les connexions matérielles sont
+        proprement fermées.
+        """
         if self._is_sequence_running:
             QMessageBox.warning(self, "Séquence en cours", "Veuillez d'abord arrêter la séquence avant de quitter.")
             event.ignore()
@@ -551,6 +647,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _open_point_file_dialog(self):
+        """Ouvre une boîte de dialogue pour sélectionner un fichier de points à charger."""
         if not self.undo_stack.isClean():
             reply = QMessageBox.question(self, "Modifications non sauvegardées",
                                          "Voulez-vous sauvegarder vos modifications avant d'ouvrir un nouveau fichier ?",
@@ -568,7 +665,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_new_triggered(self):
-        """Gère la création d'une nouvelle liste de points."""
+        """Gère l'action "Nouveau" pour créer une liste de points vierge."""
         if not self.undo_stack.isClean():
             reply = QMessageBox.question(self, "Modifications non sauvegardées",
                                          "Voulez-vous sauvegarder vos modifications avant de créer un nouveau fichier ?",
@@ -586,6 +683,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_save_triggered(self) -> bool:
+        """Gère l'action "Enregistrer"."""
         self.controller.sync_points_from_gui(self._get_table_data())
         if self.controller.current_file_path:
             success = self.controller.save_point_list_to_file(self.controller.current_file_path)
@@ -597,6 +695,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_save_as_triggered(self) -> bool:
+        """Gère l'action "Enregistrer sous..."."""
         self.controller.sync_points_from_gui(self._get_table_data())
         file_path, _ = QFileDialog.getSaveFileName(self, "Enregistrer la liste de points", "",
                                                    "Fichier Texte (*.txt);;Fichier CSV (*.csv);;Tous les fichiers (*)")
@@ -609,12 +708,14 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_add_point_triggered(self):
+        """Crée et pousse une commande d'ajout de point sur la pile Undo."""
         point_to_add = self.controller.add_current_position_as_point()
         command = AddPointCommand(self.controller, self, point_to_add if point_to_add else None)
         self.undo_stack.push(command)
 
     @Slot()
     def _on_delete_points_triggered(self):
+        """Crée et pousse une commande de suppression de points sur la pile Undo."""
         selected_rows = sorted(list({item.row() for item in self.points_table.selectedItems()}))
         if not selected_rows: return
         command = DeletePointsCommand(self.controller, self, selected_rows)
@@ -622,6 +723,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_move_up_triggered(self):
+        """Crée et pousse une commande de déplacement de point vers le haut sur la pile Undo."""
         selected_rows = {item.row() for item in self.points_table.selectedItems()}
         if len(selected_rows) == 1:
             index = list(selected_rows)[0]
@@ -631,6 +733,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_move_down_triggered(self):
+        """Crée et pousse une commande de déplacement de point vers le bas sur la pile Undo."""
         selected_rows = {item.row() for item in self.points_table.selectedItems()}
         if len(selected_rows) == 1:
             index = list(selected_rows)[0]
@@ -640,6 +743,7 @@ class MainWindow(QMainWindow):
 
     @Slot(QTableWidgetItem)
     def _on_cell_changed(self, item):
+        """Crée et pousse une commande de modification de cellule sur la pile Undo."""
         col = item.column()
         row = item.row()
         header = self.controller.get_point_headers()[col]
@@ -657,6 +761,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_save_manual_measure_triggered(self):
+        """Gère le clic sur le bouton de sauvegarde de mesure manuelle."""
         filename = self.manual_filename_edit.text()
         if not filename:
             QMessageBox.warning(self, "Nom de fichier manquant",
@@ -666,6 +771,12 @@ class MainWindow(QMainWindow):
 
     @Slot(list)
     def update_points_table(self, points: list):
+        """Met à jour le contenu du tableau de points.
+
+        Vide et repeuple le `QTableWidget` avec les données fournies.
+
+        :param points: Une liste de dictionnaires représentant les points à afficher.
+        """
         self.points_table.itemChanged.disconnect(self._on_cell_changed)
         self.points_table.setRowCount(0)
         headers = self.controller.get_point_headers()
@@ -702,6 +813,7 @@ class MainWindow(QMainWindow):
 
     @Slot(bool)
     def update_save_action_state(self, is_modified: bool):
+        """Met à jour le titre de la fenêtre pour indiquer l'état de modification."""
         title = self.windowTitle().replace(" *", "")
         if is_modified:
             title += " *"
@@ -710,6 +822,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _open_telecommande(self):
+        """Ouvre la fenêtre de la télécommande."""
         if self.telecommande_window is None or not self.telecommande_window.isVisible():
             self.telecommande_window = TelecommandeWindow(self.controller, self)
             self.telecommande_window.show()
@@ -720,16 +833,26 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _open_config_window(self):
+        """Ouvre la fenêtre de configuration."""
         config_dialog = ConfigWindow(self.controller, self)
         config_dialog.exec()
         self.update_status_bar("Fenêtre de configuration fermée.")
 
     @Slot(str)
     def update_status_bar(self, message: str):
+        """Affiche un message dans la barre d'état.
+
+        :param message: Le message à afficher.
+        """
         self.status_message_label.setText(message)
 
     @Slot(dict, dict)
     def update_coordinate_display(self, robot_pos: dict, capsule_pos: dict):
+        """Met à jour l'affichage des coordonnées en temps réel dans la barre d'état.
+
+        :param robot_pos: Dictionnaire des coordonnées "robot".
+        :param capsule_pos: Dictionnaire des coordonnées "capsule".
+        """
         self.status_bar_labels['X'].setText(f"X: {round(capsule_pos.get('X', 0.0))}")
         self.status_bar_labels['Y'].setText(f"Y: {round(capsule_pos.get('Y', 0.0))}")
         self.status_bar_labels['Z'].setText(f"Z: {round(capsule_pos.get('Z', 0.0))}")
@@ -739,6 +862,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _open_robot_log_viewer(self):
+        """Ouvre la fenêtre de la visionneuse de logs pour le robot."""
         # on regarde d'abord RobotController (souvent le plus bavard), puis GalilDriver
         path = _get_active_log_file(["RobotApp.RobotController", "RobotApp.GalilDriver"])
         if not path:
@@ -754,6 +878,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _open_pulse_log_viewer(self):
+        """Ouvre la fenêtre de la visionneuse de logs pour PULSE."""
         path = _get_active_log_file(["RobotApp.PulseLabshopDriver"])
         if not path:
             QMessageBox.information(self, "Logs PULSE", "Aucun fichier de log PULSE n’a été trouvé pour cette session.")
@@ -766,18 +891,18 @@ class MainWindow(QMainWindow):
             self.pulse_log_window.activateWindow()
             self.pulse_log_window.raise_()
 
-    @Slot()
-    def _test_manual_measure_clicked(self):
-        """Uniquement pour le débogage de la connexion du signal."""
-        message = "SIGNAL REÇU DANS MAINWINDOW !"
-        print(f"DEBUG GUI: {message}")
-        QMessageBox.information(self, "Test Signal", message)
 
 
 def run_application():
-    """
-    Fonction principale qui gère le cycle de vie de l'application,
-    y compris les vérifications de démarrage.
+    """Point d'entrée principal de l'application graphique.
+
+    Gère le cycle de vie de l'application :
+    1. Affiche un écran de démarrage (splash screen).
+    2. Initialise le MainController.
+    3. Tente de se connecter au matériel (robot et PULSE).
+    4. Gère les erreurs de connexion et les dialogues de configuration initiaux.
+    5. Crée et affiche la fenêtre principale.
+    6. Lance la boucle d'événements de l'application.
     """
     import sys
     from pathlib import Path
@@ -950,9 +1075,3 @@ def run_application():
     splash.finish(fenetre)
 
     return app.exec()
-
-
-if __name__ == '__main__':
-    setup_logging()
-    exit_code = run_application()
-    sys.exit(exit_code)
