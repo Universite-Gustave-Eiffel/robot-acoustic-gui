@@ -573,16 +573,28 @@ class MainController(QObject):
 
     def save_all_configurations(self):
         try:
+            # Sauvegarde de la configuration robot
             if self.config and self.robot_config_path:
                 with open(self.robot_config_path, 'w', encoding='utf-8') as configfile:
                     self.config.write(configfile)
                 self.logger.info(f"Configuration robot sauvegardée dans {self.robot_config_path}")
+
+
             if self.pulse_config:
                 controller_file_path = Path(__file__).resolve()
                 pulse_config_path = controller_file_path.parent / 'labshop_interface' / 'config.ini'
                 with open(pulse_config_path, 'w', encoding='utf-8') as configfile:
                     self.pulse_config.write(configfile)
                 self.logger.info(f"Configuration PULSE sauvegardée dans {pulse_config_path}")
+
+                if self.pulse:
+                    new_save_dir = self.pulse_config.get('PulseSettings', 'save_path_dir', fallback="")
+                    if new_save_dir:
+
+                        cfg_path = self.pulse_config_path
+                        save_abs = _resolve_from_config(new_save_dir, cfg_path, interface_name='labshop_interface')
+                        self.pulse.set_save_directory(save_abs)
+
             self.log_message_sent.emit("Configurations sauvegardées avec succès.")
         except Exception as e:
             self.logger.error(f"Erreur lors de la sauvegarde des configurations : {e}", exc_info=True)

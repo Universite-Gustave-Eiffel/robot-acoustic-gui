@@ -303,13 +303,6 @@ class PulseLabshopDriver:
             self.function_group_to_save = None
             return False
 
-    def save_function_group_ascii(self, filename_suffix):
-        if not self.function_group_to_save:
-            logger.error(
-                "Impossible de sauvegarder (ASCII) : Aucun FunctionGroup n'a été sélectionné."
-            )
-            return False
-
     def check_hardware_connection(self) -> bool:
         """
         Effectue un test fonctionnel rapide pour vérifier la connexion matérielle.
@@ -480,6 +473,11 @@ class PulseLabshopDriver:
         except Exception as e:
             logger.error(f"Erreur lors de l'arrêt de la mesure PULSE : {e}", exc_info=True)
             return False
+
+    def set_save_directory(self, new_save_dir: str):
+        """Met à jour le répertoire de sauvegarde utilisé par le driver."""
+        self.save_path_dir = new_save_dir
+        logger.info(f"Le répertoire de sauvegarde a été mis à jour : {self.save_path_dir}")
 
     def save_function_group_ascii(self, filename_suffix):
         if not self.function_group_to_save:
