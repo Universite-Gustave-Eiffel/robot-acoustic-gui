@@ -10,16 +10,25 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from src.main_controller import MainController
+from main_controller import MainController
 
 
 class ConfigWindow(QDialog):
-    """
-    Fenêtre de dialogue pour configurer les paramètres de l'application
-    stockés dans les fichiers .ini, avec zone de défilement.
+    """Fenêtre de dialogue pour éditer les paramètres de l'application.
+
+    Cette fenêtre permet à l'utilisateur de modifier les configurations stockées
+    dans les fichiers `.ini` sans avoir à éditer les fichiers texte manuellement.
+    Les paramètres sont organisés en onglets (Robot, PULSE).
+
+    La sauvegarde applique les changements à la session en cours (si possible) et
+    les écrit sur le disque pour les sessions futures.
+
+    :param controller: L'instance du :class:`~src.main_controller.MainController`.
+    :param parent: Le widget parent (généralement la :class:`~src.gui.new_gui.MainWindow`).
     """
 
     def __init__(self, controller: MainController, parent=None):
+        """Initialise la fenêtre de configuration."""
         super().__init__(parent)
         self.controller = controller
         self.setWindowTitle("Configuration de l'application")
@@ -64,7 +73,7 @@ class ConfigWindow(QDialog):
         self._load_config()
 
     def _create_robot_tab(self):
-        """Crée le contenu de l'onglet de configuration du robot."""
+        """Construit l'onglet des paramètres liés au robot et à la séquence. (Interne)"""
         layout = QVBoxLayout(self.robot_tab_widget)
 
         serial_group = QGroupBox("Connexion Série")
@@ -145,6 +154,7 @@ class ConfigWindow(QDialog):
         layout.addStretch()
 
     def _create_pulse_tab(self):
+        """Construit l'onglet des paramètres liés à PULSE LabShop. (Interne)"""
         layout = QFormLayout(self.pulse_tab_widget)
 
         paths_group = QGroupBox("Chemins d'accès PULSE")
@@ -164,6 +174,7 @@ class ConfigWindow(QDialog):
         layout.addWidget(paths_group)
 
     def _create_path_selector(self, is_dir=False, file_filter="Tous les fichiers (*)"):
+        """Crée un widget composite QLineEdit + QPushButton pour la sélection de fichiers/dossiers. (Interne)"""
         line_edit = QLineEdit()
         browse_button = QPushButton("Parcourir...")
 
@@ -179,6 +190,7 @@ class ConfigWindow(QDialog):
         return line_edit, browse_button
 
     def _load_config(self):
+        """Charge les valeurs actuelles depuis le contrôleur et remplit les champs de la fenêtre. (Interne)"""
         if self.controller.config:
             cfg = self.controller.config
             self.initial_robot_port = cfg.get('SERIAL', 'port', fallback="")
@@ -217,11 +229,19 @@ class ConfigWindow(QDialog):
             self.pulse_save_dir_edit.setText(p_cfg.get('PulseSettings', 'save_path_dir', fallback=""))
 
     def _ensure_sections(self, cfg, sections):
+        """S'assure que les sections nécessaires existent dans un objet ConfigParser. (Interne)"""
         for section in sections:
             if not cfg.has_section(section):
                 cfg.add_section(section)
 
     def _save_config(self) -> bool:
+        """Récupère les valeurs des champs, met à jour les objets de configuration
+        dans le contrôleur, et déclenche leur sauvegarde sur le disque. (Interne)
+
+        Détecte également si un redémarrage de l'application est nécessaire.
+
+        :return: ``True`` si la sauvegarde a réussi, ``False`` sinon.
+        """
         restart_needed = False
         if self.robot_port.text() != self.initial_robot_port or \
                 self.robot_baudrate.currentText() != self.initial_robot_baudrate or \
@@ -283,5 +303,10 @@ class ConfigWindow(QDialog):
             return False
 
     def accept(self):
+        """Gère le clic sur le bouton "OK".
+
+        Tente de sauvegarder la configuration. Si la sauvegarde réussit,
+        la fenêtre se ferme.
+        """
         if self._save_config():
             super().accept()

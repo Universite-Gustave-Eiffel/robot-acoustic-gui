@@ -3,13 +3,26 @@ import sys
 from PySide6.QtGui import QPixmap, QIcon
 
 class ResourceManager:
-    """Gestionnaire de ressources (icônes, images) pour l'application."""
+    """Gestionnaire de ressources statiques (icônes, images) de l'application.
+
+    Cette classe fournit des méthodes statiques pour obtenir les chemins d'accès
+    aux fichiers de ressources. Sa principale responsabilité est de résoudre
+    correctement l'emplacement du dossier des icônes, que l'application soit
+    lancée en mode développement (depuis les sources) ou en mode production
+    (depuis un exécutable PyInstaller).
+
+    Elle utilise la variable `sys._MEIPASS` pour détecter si le programme
+    est "gelé" par PyInstaller.
+    """
 
     @staticmethod
     def _icons_candidates() -> list[Path]:
-        """
-        Retourne les chemins possibles du dossier des icônes, en dev et en exécutable PyInstaller.
-        Dans le build (onedir), les datas sont copiées sous 'gui/new_icons' (voir .spec).
+        """Retourne les chemins possibles du dossier des icônes. (Interne)
+
+        Construit une liste de chemins candidats en fonction du contexte
+        d'exécution (développement vs. production).
+
+        :return: Une liste d'objets `Path`.
         """
         candidates: list[Path] = []
         if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
@@ -35,6 +48,11 @@ class ResourceManager:
 
     @classmethod
     def get_icon_path(cls, icon_name: str) -> str:
+        """Construit le chemin absolu vers un fichier d'icône.
+
+        :param icon_name: Le nom du fichier de l'icône (ex: 'play.png').
+        :return: Le chemin complet sous forme de chaîne de caractères.
+        """
         path = cls.ICONS_DIR / icon_name
         if not path.is_file():
             print(f"Avertissement : Icône non trouvée à {path}")
@@ -43,6 +61,11 @@ class ResourceManager:
 
     @classmethod
     def get_pixmap(cls, pixmap_name: str) -> QPixmap:
+        """Charge une image depuis les ressources et la retourne comme un objet QPixmap.
+
+        :param pixmap_name: Le nom du fichier de l'image (ex: 'splash.png').
+        :return: Un objet :class:`QPixmap`.
+        """
         path = cls.ICONS_DIR / pixmap_name
         pixmap = QPixmap(str(path))
         if pixmap.isNull():

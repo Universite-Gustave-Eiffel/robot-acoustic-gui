@@ -18,14 +18,26 @@ MAX_DOC_LINES = 20000  # borne d'affichage : n'affiche que les N dernières lign
 
 
 class LogViewerWindow(QDialog):
-    """
-    Visionneuse de logs :
-      - suit le fichier (tail -f) sans le tronquer
-      - filtre par niveaux
-      - défilement auto optionnel
-      - borne l'affichage pour rester fluide (le fichier, lui, reste complet)
+    """Fenêtre de visualisation de logs en temps réel.
+
+    Cette visionneuse est conçue pour "suivre" un fichier de log (comme la
+    commande ``tail -f`` sous Linux). Elle lit les nouvelles lignes ajoutées au
+    fichier à intervalle régulier et les affiche.
+
+    Fonctionnalités :
+    - Rafraîchissement automatique.
+    - Filtrage par niveau de log (DEBUG, INFO, WARNING, etc.).
+    - Défilement automatique optionnel.
+    - Limitation du nombre de lignes affichées pour maintenir la fluidité
+    de l'interface, sans altérer le fichier de log complet sur le disque.
+
+    :param file_path: Le chemin du fichier de log à surveiller.
+    :param title: Le titre à donner à la fenêtre.
+    :param icon_name_or_path: Chemin vers l'icône de la fenêtre.
+    :param parent: Le widget parent.
     """
     def __init__(self, file_path: str, title: str, icon_name_or_path: Optional[str] = None, parent: Optional[QWidget] = None):
+        """Initialise la visionneuse de logs."""
         super().__init__(parent)
         self.setWindowTitle(title)
         if icon_name_or_path:
@@ -61,6 +73,7 @@ class LogViewerWindow(QDialog):
     # ---------- UI ----------
 
     def _build_ui(self):
+        """Construit l'interface de la visionneuse de logs. (Interne)"""
         layout = QVBoxLayout(self)
 
         # chemin du fichier
@@ -106,6 +119,7 @@ class LogViewerWindow(QDialog):
         self.setMinimumSize(900, 600)
 
     def _wire_events(self):
+        """Connecte les signaux des widgets (checkboxes, boutons) à leurs slots. (Interne)"""
         for lvl, cb in self.chk_levels.items():
             cb.toggled.connect(lambda checked, L=lvl: self._on_level_toggled(L, checked))
         self.chk_autoscroll.toggled.connect(self._on_autoscroll_toggled)
@@ -114,15 +128,23 @@ class LogViewerWindow(QDialog):
     # ---------- Slots ----------
 
     def _on_level_toggled(self, level: str, checked: bool):
+        """Gère le changement d'état d'un filtre de niveau de log. (Interne)"""
         self._levels_enabled[level] = bool(checked)
         self._rebuild_view_full()
 
     def _on_autoscroll_toggled(self, val: bool):
+        """Ouvre le répertoire contenant le fichier de log dans l'explorateur de fichiers. (Interne)"""
         self._auto_scroll = bool(val)
         if self._auto_scroll:
             self._scroll_to_bottom()
 
     def _on_open_dir(self):
+        """Ouvre le répertoire contenant le fichier de log dans l'explorateur de fichiers du système.
+
+        Cette méthode est un slot connecté au clic du bouton "Ouvrir dossier".
+        Elle utilise des commandes spécifiques à l'OS (`os.startfile` pour Windows)
+        pour une intégration native.
+        """
         if not self.file_path.exists():
             QMessageBox.information(self, "Ouvrir dossier", "Fichier introuvable.")
             return
@@ -140,6 +162,12 @@ class LogViewerWindow(QDialog):
     # ---------- Lecture / rendu ----------
 
     def _poll_file(self, initial: bool = False):
+        """Lit les nouvelles données depuis le fichier de log. (Interne)
+
+        Cette méthode est appelée périodiquement par un QTimer. Elle garde en
+        mémoire la dernière position lue dans le fichier pour ne lire que
+        les nouvelles lignes.
+        """
         try:
             if not self.file_path.exists():
                 return
@@ -176,6 +204,7 @@ class LogViewerWindow(QDialog):
             pass
 
     def _render_incremental(self, new_lines: List[str]):
+        """Ajoute de nouvelles lignes à la vue sans tout redessiner. (Interne)"""
         filtered = self._apply_level_filter(new_lines)
         if not filtered:
             return
@@ -200,6 +229,7 @@ class LogViewerWindow(QDialog):
         self._trim_document_if_needed()
 
     def _rebuild_view_full(self):
+        """Redessine complètement le contenu de la vue à partir du buffer mémoire. (Interne)"""
         filtered = self._apply_level_filter(list(self._buffer))
         self.view.setPlainText("".join(filtered))
         self._last_render_count = len(filtered)
@@ -208,6 +238,7 @@ class LogViewerWindow(QDialog):
         self._trim_document_if_needed()
 
     def _apply_level_filter(self, lines: List[str]) -> List[str]:
+        """Filtre une liste de lignes de log en fonction des niveaux activés. (Interne)"""
         out: List[str] = []
         enabled = self._levels_enabled
 
@@ -229,18 +260,17 @@ class LogViewerWindow(QDialog):
     # ---------- utilitaires UI ----------
 
     def _is_near_bottom(self) -> bool:
+        """Vérifie si la barre de défilement est en bas de la vue. (Interne)"""
         sb = self.view.verticalScrollBar()
         return sb.value() >= sb.maximum() - 2
 
     def _scroll_to_bottom(self):
+        """Fait défiler la vue jusqu'en bas. (Interne)"""
         sb = self.view.verticalScrollBar()
         sb.setValue(sb.maximum())
 
     def _trim_document_if_needed(self):
-        """
-        Maintient le nombre de blocs (≈ lignes) affichés sous MAX_DOC_LINES
-        sans jamais toucher au fichier source.
-        """
+        """Supprime les lignes les plus anciennes de la vue si le total dépasse MAX_DOC_LINES. (Interne)"""
         doc = self.view.document()
         blocks = doc.blockCount()
         if blocks <= MAX_DOC_LINES:
@@ -267,6 +297,7 @@ class LogViewerWindow(QDialog):
             sb.setValue(prev_value)
 
     def closeEvent(self, ev):
+        """Gère la fermeture de la fenêtre, en s'assurant d'arrêter le QTimer."""
         try:
             self._timer.stop()
         except Exception:

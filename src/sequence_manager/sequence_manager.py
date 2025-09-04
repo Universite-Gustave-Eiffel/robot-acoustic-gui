@@ -8,6 +8,20 @@ from .states import StateIdle, StateStartMove, StateEnd, StateError
 
 
 class SequenceManager(QThread):
+    """Gère l'exécution d'une séquence de mesure dans un thread séparé.
+
+    Cette classe implémente une machine à états finis (FSM) pour orchestrer
+    le cycle de mesure : déplacement du robot, stabilisation, acquisition PULSE,
+    et sauvegarde. Elle communique son état à l'application principale
+    via des signaux Qt.
+
+    :param robot: L'instance du :class:`~src.controller_interface.GalilDriver.RobotController`.
+    :param pulse: L'instance du :class:`~src.labshop_interface.PulseLabshopDriver.PulseLabshopDriver`.
+    :param points: La liste d'objets :class:`~src.data_manager.Point` à traiter.
+    :param sequence_params: Un dictionnaire contenant les paramètres de la séquence
+                            (ex: hauteur de sécurité, temps de stabilisation).
+    :param single_shot: Si ``True``, la séquence s'arrête après avoir traité un seul point.
+    """
     status_changed = Signal(str)
     active_point_changed = Signal(int)
     sequence_completed = Signal(str, int)
@@ -18,6 +32,7 @@ class SequenceManager(QThread):
     stop_robot_requested = Signal()
 
     def __init__(self, robot, pulse, points, sequence_params, single_shot=False):
+        """Initialise le gestionnaire de séquence."""
         super().__init__()
         self.robot = robot
         self.pulse = pulse
@@ -39,11 +54,26 @@ class SequenceManager(QThread):
 
     @Slot(bool, str)
     def on_measure_action_completed(self, success: bool, message: str):
+        """Slot pour recevoir le résultat d'une action asynchrone demandée à PULSE.
+
+        Le :class:`~src.main_controller.MainController` appelle ce slot lorsque PULSE a terminé
+        une opération (démarrage, sauvegarde). Ce mécanisme de callback via un
+        `threading.Event` permet à la FSM de se mettre en attente sans bloquer.
+
+        :param success: ``True`` si l'action a réussi, ``False`` sinon.
+        :param message: Message de statut associé à l'action.
+        """
         self.action_success = success
         self.action_message = message
         self.action_completed_event.set()
 
     def run(self):
+        """Point d'entrée principal du thread. Exécute la machine à états.
+
+        Cette méthode est appelée automatiquement lors du `start()` du thread.
+        Elle boucle à travers les états jusqu'à atteindre un état final
+        (:class:`~.states.StateEnd`) ou jusqu'à ce que l'arrêt soit demandé.
+        """
         final_message = "Séquence terminée avec succès."
         self._is_running = True
         self._is_paused = False
@@ -100,6 +130,11 @@ class SequenceManager(QThread):
         self._is_running = False
 
     def stop(self):
+        """Demande l'arrêt propre (doux) de la séquence.
+
+        Positionne un drapeau qui sera détecté par la boucle `run()` pour
+        terminer l'exécution.
+        """
         self.logger.info("Demande d'arrêt de la séquence.")
         self._is_running = False
         if self.action_completed_event and not self.action_completed_event.is_set():
@@ -109,6 +144,7 @@ class SequenceManager(QThread):
         self.stop_robot_requested.emit()
 
     def toggle_pause(self):
+        """Met en pause ou reprend l'exécution de la séquence."""
         self._is_paused = not self._is_paused
         state = "en pause" if self._is_paused else "reprise"
         self.logger.info(f"Séquence mise {state}.")

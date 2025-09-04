@@ -5,22 +5,44 @@ import os
 
 
 class State:
+    """Classe de base abstraite pour tous les états de la machine à états (FSM).
+
+    :param robot: L'instance du contrôleur robot, partagée entre les états.
+    """
     def __init__(self, robot):
+        """Initialise un état."""
         self.robot = robot
         self.name = self.__class__.__name__
         self.logger = logging.getLogger(f"RobotApp.FSM.{self.name}")
 
     def execute(self, context):
+        """Exécute la logique de l'état.
+
+        Cette méthode doit être implémentée par toutes les sous-classes.
+
+        :param context: Un dictionnaire contenant l'état partagé de la séquence
+                        (index du point courant, liste de points, etc.).
+        :return: Un tuple contenant la classe du prochain état à exécuter et
+                 le contexte mis à jour.
+        """
         raise NotImplementedError
 
 
 class StateIdle(State):
+    """État de repos initial. La FSM ne fait rien."""
     def execute(self, context):
+        """Ne fait rien et reste dans l'état Idle."""
         return StateIdle, context
 
 
 class StateStartMove(State):
-    """Démarre le mouvement du robot vers un point et passe immédiatement à l'attente."""
+    """Démarre le mouvement du robot vers le point cible.
+
+    Calcule les coordonnées robot cibles à partir des coordonnées capsule du point.
+    Si le mode de sécurité est activé, il décompose le mouvement en plusieurs
+    segments (montée, translation, descente).
+    Il lance le premier segment de mouvement de manière non-bloquante.
+    """
 
     def execute(self, context):
         point_index = context['current_index']
@@ -102,7 +124,12 @@ class StateStartMove(State):
 
 
 class StateWaitForMove(State):
-    """Attend la fin du mouvement en cours sans bloquer."""
+    """Attend la fin du mouvement du robot en cours.
+
+    Cet état interroge l'état du robot sans bloquer la FSM. Si le mouvement
+    est un mouvement de sécurité multi-segments, il enchaîne le segment
+    suivant une fois le précédent terminé.
+    """
 
     def execute(self, context):
         robot_lock = context['robot_lock']
@@ -127,7 +154,10 @@ class StateWaitForMove(State):
 
 
 class StateStabilize(State):
-    """Attend un temps défini pour la stabilisation mécanique."""
+    """Marque une pause pour permettre la stabilisation mécanique du robot.
+
+    La durée de la stabilisation est définie dans les paramètres de la séquence.
+    """
 
     def execute(self, context):
         if 'stabilize_end_time' not in context:
@@ -146,7 +176,11 @@ class StateStabilize(State):
 
 
 class StateStartMeasure(State):
-    """Demande le démarrage de la mesure PULSE."""
+    """Demande le démarrage d'une mesure à PULSE.
+
+    Émet un signal (`start_measure_requested`) vers le MainController
+    et passe à un état d'attente de la confirmation.
+    """
 
     def execute(self, context):
         seq_manager = context['sequence_manager']
@@ -164,7 +198,11 @@ class StateStartMeasure(State):
 
 
 class StateWaitingForMeasureAction(State):
-    """Attend que l'action PULSE (démarrage, sauvegarde) soit terminée."""
+    """Attend qu'une action PULSE (démarrage, sauvegarde) soit terminée.
+
+    Cet état se met en pause, attendant que le MainController signale la fin
+    de l'opération PULSE via l'événement `action_completed_event`.
+    """
 
     def execute(self, context):
         seq_manager = context['sequence_manager']
@@ -184,7 +222,11 @@ class StateWaitingForMeasureAction(State):
 
 
 class StateWaitForMeasure(State):
-    """Attend que la mesure PULSE soit physiquement terminée."""
+    """Attend que la mesure PULSE soit physiquement terminée.
+
+    Interroge l'état du driver PULSE (``is_measurement_complete``) jusqu'à
+    ce que la mesure soit finie.
+    """
 
     def execute(self, context):
         pulse = context['sequence_manager'].pulse
@@ -196,7 +238,12 @@ class StateWaitForMeasure(State):
 
 
 class StateSaveMeasure(State):
-    """Demande la sauvegarde des données de la mesure PULSE."""
+    """Demande la sauvegarde des données de la mesure PULSE.
+
+    Construit le nom de fichier final (en gérant les mesures multiples pour
+    un même point) et émet un signal (`save_measure_requested`) vers le
+    MainController.
+    """
 
     def execute(self, context):
         seq_manager = context['sequence_manager']
@@ -227,7 +274,13 @@ class StateSaveMeasure(State):
 
 
 class StateNextPoint(State):
-    """Passe au point suivant, ou relance une mesure, ou termine."""
+    """Décide de la prochaine action après une sauvegarde réussie.
+
+    Incrémente le compteur de mesures. S'il reste des mesures à faire pour
+    le point courant, il retourne à l'état `StateStartMeasure`. Sinon, il
+    passe au point suivant (retour à `StateStartMove`) ou termine la séquence
+    si tous les points ont été traités ou si le mode `single_shot` est actif.
+    """
 
     def execute(self, context):
         seq_manager = context['sequence_manager']
@@ -265,11 +318,17 @@ class StateNextPoint(State):
 
 
 class StateEnd(State):
+    """État final de la séquence. Marque la fin de l'exécution."""
     def execute(self, context):
         return StateEnd, context
 
 
 class StateError(State):
+    """État atteint en cas d'erreur critique durant la séquence.
+
+    Cet état termine immédiatement la séquence. Le message d'erreur est
+    stocké dans le contexte pour être affiché à l'utilisateur.
+    """
     def execute(self, context):
         error_message = context.get('error', 'Erreur inconnue.')
         self.logger.error(f"État d'erreur atteint : {error_message}")

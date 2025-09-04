@@ -1,31 +1,43 @@
+# Fichier de configuration du projet Python, utilisant le standard PEP 621.
+# Il définit les métadonnées du projet, ses dépendances et comment le construire.
+
 [build-system]
+# Spécifie les outils nécessaires pour construire le projet.
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
+# Métadonnées générales du projet.
 name = "robot_acoustic_gui"
 version = "0.1.0"
 description = "Application de contrôle du robot acoustique et acquisition."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.12" # Précision de la version utilisée pour le développement
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]
 
-# Liste des dépendances de votre projet
+# Liste des dépendances de production.
+# Ce sont les bibliothèques requises pour que l'application fonctionne.
 dependencies = [
     "pyserial",
     "pygame",
     "configparser",
     "PySide6",
+    "comtypes"
 ]
 
 [project.optional-dependencies]
+# Dépendances optionnelles, groupées par usage.
+# Le groupe 'dev' contient les outils pour le développement et les tests.
 dev = [
     "pytest",
     "pytest-mock",
+    # PyInstaller est un outil de dev pour créer l'exécutable
+    "pyinstaller"
 ]
 
 [tool.setuptools.packages.find]
+# Indique à setuptools de chercher les paquets Python dans le dossier 'src'.
 where = ["src"]

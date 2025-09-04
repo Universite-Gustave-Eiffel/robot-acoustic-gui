@@ -37,11 +37,31 @@ logger = logging.getLogger("RobotApp.PulseLabshopDriver")
 
 
 class PulseTemplateEvents:
+    """Classe réceptrice ("sink") pour les événements COM de PULSE.
+
+    Une instance de cette classe est connectée à un template PULSE pour écouter
+    les notifications asynchrones (via l'interface ``INotify2``), telles que
+    le début/fin d'une mesure, la complétion d'un autorange, etc.
+    Elle met à jour l'état du :class:`PulseLabshopDriver` parent en conséquence.
+
+    :param driver_instance: L'instance de :class:`PulseLabshopDriver` à notifier.
+    """
     def __init__(self, driver_instance):
+        """Initialise le récepteur d'événements."""
         self.driver = driver_instance
         logger.debug("PulseTemplateEvents sink instancié.")
 
     def Notify2(self, NotifierObject, Message, Parameter):
+        """Méthode appelée par PULSE lorsqu'un événement se produit.
+
+        Cette méthode est l'implémentation directe de l'interface ``INotify2``.
+        Elle décode les codes de message et de paramètre pour logger des
+        informations lisibles et mettre à jour les drapeaux d'état dans le driver.
+
+        :param NotifierObject: L'objet COM source de l'événement (généralement le template).
+        :param Message: Le code entier identifiant le type de message (ex: BKTemplateMeasState).
+        :param Parameter: Le code entier donnant le détail de l'événement (ex: BKMeasStarted).
+        """
         try:
             event_source_name = "Objet Inconnu"
             if NotifierObject:
@@ -106,12 +126,22 @@ class PulseTemplateEvents:
 
 
 class PulseLabshopDriver:
-    """
-    Driver pour contrôler PULSE LabShop via COM, utilisant la gestion d'événements
-    pour une interaction robuste et asynchrone.
+    """Driver pour contrôler PULSE LabShop via l'interface COM.
+
+    Cette classe gère le cycle de vie de l'application PULSE : lancement,
+    ouverture de projet, activation de template, déclenchement de mesures
+    et sauvegarde des résultats.
+
+    Elle repose sur un système de gestion d'événements pour une interaction
+    asynchrone et robuste, ce qui est nécessaire car de nombreuses opérations
+    dans PULSE (comme l'autorange ou une mesure) prennent du temps.
+
+    :param project_path: Chemin vers le fichier projet PULSE (.pls) à charger.
+    :param save_path_dir: Chemin vers le répertoire où les mesures ASCII seront sauvegardées.
     """
 
     def __init__(self, project_path=None, save_path_dir=None):
+        """Initialise le driver PULSE."""
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.project_path_to_load = project_path if project_path else os.path.join(script_dir, "pulse_projects",
                                                                                    "MinimalTest.pls")
@@ -138,6 +168,12 @@ class PulseLabshopDriver:
         logger.info("PulseLabshopDriver instancié.")
 
     def _event_pump_loop(self):
+        """Boucle exécutée dans un thread dédié pour pomper les messages COM. (Interne)
+
+        Cette boucle est essentielle pour que les événements COM soient reçus par
+        l'application Python. Sans elle, les notifications de PULSE ne seraient
+        jamais traitées.
+        """
         pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
         logger.debug("Thread de pompage des événements COM dédié démarré.")
         try:
@@ -151,6 +187,20 @@ class PulseLabshopDriver:
             pythoncom.CoUninitialize()
 
     def initialize_pulse(self):
+        """Initialise la connexion avec PULSE LabShop.
+
+        Cette méthode exécute la séquence complète de démarrage :
+        1. Se connecte à une instance existante de PULSE ou en crée une nouvelle.
+        2. Ouvre le projet spécifié.
+        3. Démarre le thread de gestion des événements COM.
+        4. Détecte le matériel d'acquisition.
+        5. Sélectionne le premier template de mesure disponible.
+        6. Se connecte aux événements du template.
+        7. Active le template et attend qu'il soit prêt.
+        8. Effectue un test de connexion matérielle rapide (start/stop).
+
+        :return: ``True`` si l'initialisation est un succès complet, ``False`` sinon.
+        """
         logger.info(f"Initialisation de PULSE LabShop avec projet: {self.project_path_to_load}")
         self.is_template_ready_for_measurement = False
         try:
@@ -268,7 +318,11 @@ class PulseLabshopDriver:
         return False
 
     def get_available_function_groups(self) -> list[str]:
-        """Retourne la liste des noms de tous les Function Groups du projet."""
+        """Retourne la liste des noms de tous les Function Groups du projet.
+
+        :return: Une liste de chaînes de caractères contenant les noms des groupes,
+                 ou une liste vide en cas d'erreur.
+        """
         if not self.project or not self.project.FunctionOrganiser:
             logger.warning("Impossible de lister les Function Groups : projet non chargé.")
             return []
@@ -288,7 +342,11 @@ class PulseLabshopDriver:
         return fg_list
 
     def set_function_group_by_name(self, name: str) -> bool:
-        """Sélectionne le Function Group à utiliser pour la sauvegarde par son nom."""
+        """Sélectionne le Function Group à utiliser pour la sauvegarde par son nom.
+
+        :param name: Le nom du "Function Group" à utiliser.
+        :return: ``True`` si le groupe a été trouvé et sélectionné, ``False`` sinon.
+        """
         if not self.project or not self.project.FunctionOrganiser:
             logger.error("Impossible de sélectionner le Function Group : projet non chargé.")
             return False
@@ -304,9 +362,12 @@ class PulseLabshopDriver:
             return False
 
     def check_hardware_connection(self) -> bool:
-        """
-        Effectue un test fonctionnel rapide pour vérifier la connexion matérielle.
-        Lance une mesure et vérifie si elle démarre réellement.
+        """Effectue un test rapide pour valider la communication avec le matériel d'acquisition.
+
+        Lance une mesure et l'arrête immédiatement. Si l'événement de démarrage
+        est bien reçu, la connexion est considérée comme fonctionnelle.
+
+        :return: ``True`` si le test réussit, ``False`` sinon.
         """
         if not self.pulse_app or not self.active_template or not self.is_template_ready_for_measurement:
             logger.error("Vérification matérielle impossible : le driver n'est pas prêt.")
@@ -346,6 +407,7 @@ class PulseLabshopDriver:
             return False
 
     def _log_generator_settings_from_template_setup(self):
+        """Inspecte et logue les paramètres du générateur de signaux. (Interne, pour le débogage)"""
         if not self.active_template or not hasattr(self.active_template, "Setup"):
             logger.debug("Impossible de logger les paramètres du générateur: template ou setup non accessible.")
             return
@@ -396,6 +458,13 @@ class PulseLabshopDriver:
         logger.info("--- Fin Vérification Paramètres Générateur ---")
 
     def autorange(self):
+        """Lance un cycle d'autorange sur le matériel.
+
+        Cette opération est asynchrone. La méthode envoie la commande et attend
+        la réception de l'événement de complétion ou de refus via le "sink" d'événements.
+
+        :return: ``True`` si l'autorange a réussi, ``False`` en cas d'échec ou de timeout.
+        """
         if not self.pulse_app or not self.active_template:
             logger.error("Impossible Autorange: PULSE non initialisé ou template non actif.")
             return False
@@ -439,6 +508,13 @@ class PulseLabshopDriver:
             return False
 
     def start_measurement(self):
+        """Démarre une mesure.
+
+        Envoie la commande 'Start' à PULSE. L'état interne (``is_measurement_active``)
+        sera mis à jour par l'événement de notification correspondant.
+
+        :return: ``True`` si la commande a été envoyée, ``False`` en cas d'erreur.
+        """
         if not self.pulse_app or not self.active_template:
             logger.error("Impossible de démarrer : PULSE non initialisé ou template non actif.")
             return False
@@ -459,6 +535,13 @@ class PulseLabshopDriver:
             return False
 
     def stop_measurement(self):
+        """Arrête la mesure en cours.
+
+        Envoie la commande 'Stop' à PULSE. L'état interne sera mis à jour par
+        l'événement de notification.
+
+        :return: ``True`` si la commande a été envoyée, ``False`` en cas d'erreur.
+        """
         if not self.pulse_app:
             logger.warning("PULSE non initialisé, impossible d'arrêter.")
             return False
@@ -475,11 +558,24 @@ class PulseLabshopDriver:
             return False
 
     def set_save_directory(self, new_save_dir: str):
-        """Met à jour le répertoire de sauvegarde utilisé par le driver."""
+        """Met à jour le répertoire de sauvegarde utilisé par le driver.
+
+        Permet de changer le chemin de sauvegarde après l'initialisation.
+
+        :param new_save_dir: Le nouveau chemin absolu du répertoire de sauvegarde.
+        """
         self.save_path_dir = new_save_dir
         logger.info(f"Le répertoire de sauvegarde a été mis à jour : {self.save_path_dir}")
 
     def save_function_group_ascii(self, filename_suffix):
+        """Sauvegarde le "Function Group" sélectionné dans un fichier texte ASCII.
+
+        Le chemin de base est défini par `self.save_path_dir`.
+
+        :param filename_suffix: Le nom du fichier (avec extension) à créer dans le
+                                répertoire de sauvegarde.
+        :return: ``True`` si la sauvegarde a réussi, ``False`` sinon.
+        """
         if not self.function_group_to_save:
             logger.error(
                 "Impossible de sauvegarder (ASCII) : Aucun FunctionGroup n'a été sélectionné."
@@ -524,6 +620,7 @@ class PulseLabshopDriver:
             return False
 
     def _close_project_and_app(self, ask_save=False, app_already_set=True):
+        """Ferme proprement le projet et l'application PULSE. (Interne)"""
         if self.event_thread and self.event_thread.is_alive():
             logger.debug("Arrêt du thread de pompage des événements dédié (depuis _close_project_and_app)...")
             self.event_thread_running = False
@@ -565,6 +662,7 @@ class PulseLabshopDriver:
             logger.debug("Référence à pulse_app (current_pulse_app_ref) traitée.")
 
     def _release_com_objects(self):
+        """Libère toutes les références aux objets COM pour un nettoyage propre. (Interne)"""
         logger.debug("Libération des objets COM internes du driver...")
         if self.event_connection:
             try:
@@ -585,11 +683,16 @@ class PulseLabshopDriver:
         logger.debug("Garbage collection.")
 
     def close(self):
+        """Ferme la connexion à PULSE et nettoie toutes les ressources."""
         logger.info("Fermeture de la connexion à PULSE LabShop...")
         self._close_project_and_app(ask_save=False, app_already_set=bool(self.pulse_app))
         logger.info("Fermeture du driver PulseLabshop terminée.")
 
     def kill_pulse_processes(self):
+        """Tente de forcer la fermeture de tous les processus 'Pulse.exe'.
+
+        À utiliser en dernier recours si l'application PULSE ne répond plus.
+        """
         logger.warning("Tentative de terminer les processus PULSE.exe...")
         try:
             result = os.system('taskkill /F /IM Pulse.exe /T > nul 2>&1')

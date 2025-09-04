@@ -7,17 +7,31 @@ from PySide6.QtGui import QIcon, QAction, QKeyEvent, QCloseEvent
 from PySide6.QtCore import Slot, Qt
 import configparser
 
-from src.gui.resource_manager import ResourceManager
-from src.main_controller import MainController
-from src.gui.commands import AddPointCommand
+from gui.resource_manager import ResourceManager
+from main_controller import MainController
+from gui.commands import AddPointCommand
 
 
 class TelecommandeWindow(QMainWindow):
-    """
-    Fenêtre de contrôle manuel avancé, avec mode de contrôle clavier en temps réel.
+    """Fenêtre de contrôle manuel avancé du robot.
+
+    Cette fenêtre offre des fonctionnalités de pilotage direct du robot,
+    indépendamment du séquenceur de la fenêtre principale. Elle est essentielle
+    pour les phases de calibration, de test et de positionnement initial.
+
+    Elle propose deux modes de déplacement :
+    - **Pas-à-pas :** Mouvements relatifs d'une distance fixe.
+    - **Temps réel :** Mouvements continus (jog) contrôlés au clavier.
+
+    Elle permet également de définir les positions de référence (Zéro, Parking)
+    et d'ajouter la position actuelle à la liste de points de la fenêtre principale.
+
+    :param controller: L'instance du :class:`~src.main_controller.MainController`.
+    :param parent: Le widget parent (généralement la :class:`~src.gui.new_gui.MainWindow`).
     """
 
     def __init__(self, controller: MainController, parent=None):
+        """Initialise la fenêtre de la télécommande."""
         super().__init__(parent)
         self.controller = controller
         self.main_window = parent
@@ -59,6 +73,7 @@ class TelecommandeWindow(QMainWindow):
             self._on_use_current_pos()
 
     def _create_ui(self):
+        """Construit l'interface utilisateur de la télécommande. (Interne)"""
         self._create_actions_and_toolbar()
 
         main_widget = QWidget()
@@ -76,6 +91,7 @@ class TelecommandeWindow(QMainWindow):
         self.update_button_states()
 
     def _create_actions_and_toolbar(self):
+        """Crée la barre d'outils avec les commandes de référence. (Interne)"""
         toolbar = QToolBar("Commandes de Référence")
         self.addToolBar(toolbar)
 
@@ -106,6 +122,7 @@ class TelecommandeWindow(QMainWindow):
         toolbar.addAction(define_pos_action)
 
     def _create_position_display_panel(self) -> QGroupBox:
+        """Crée le panneau affichant les positions robot et capsule actuelles. (Interne)"""
         group = QGroupBox("Position Actuelle")
         grid = QGridLayout(group)
         headers = ["", "X (mm)", "Y (mm)", "Z (mm)", "Theta (°)", "Phi (°)"]
@@ -123,6 +140,7 @@ class TelecommandeWindow(QMainWindow):
         return group
 
     def _create_key_label(self, text):
+        """Crée un widget QLabel stylisé pour représenter une touche de clavier. (Interne)"""
         label = QLabel(text)
         label.setFrameStyle(QFrame.Box | QFrame.Raised)
         label.setAlignment(Qt.AlignCenter)
@@ -131,6 +149,7 @@ class TelecommandeWindow(QMainWindow):
         return label
 
     def _create_realtime_control_panel(self) -> QGroupBox:
+        """Crée le panneau pour le contrôle clavier temps réel (jog). (Interne)"""
         group = QGroupBox("Contrôle Clavier Temps Réel")
         main_layout = QVBoxLayout(group)
         self.keyboard_control_button = QPushButton("Activer le Contrôle Clavier")
@@ -164,6 +183,7 @@ class TelecommandeWindow(QMainWindow):
         return group
 
     def _create_jogging_panel(self) -> QGroupBox:
+        """Crée le panneau pour les déplacements absolus en coordonnées capsule. (Interne)"""
         self.jogging_group = QGroupBox("Déplacements Relatifs (Pas-à-pas)")
         grid = QGridLayout(self.jogging_group)
         axes = ["X", "Y", "Z", "THETA", "PHI"]
@@ -188,6 +208,7 @@ class TelecommandeWindow(QMainWindow):
         return self.jogging_group
 
     def _create_absolute_move_panel(self) -> QGroupBox:
+        """Crée le panneau pour l'ajout de la position actuelle à la liste de points. (Interne)"""
         self.absolute_move_group = QGroupBox("Déplacement Absolu (Coordonnées Capsule)")
         layout = QHBoxLayout(self.absolute_move_group)
         form_layout = QFormLayout()
@@ -217,6 +238,7 @@ class TelecommandeWindow(QMainWindow):
         return self.absolute_move_group
 
     def _create_point_creation_panel(self) -> QGroupBox:
+        """Crée le panneau pour l'ajout de la position actuelle à la liste de points. (Interne)"""
         self.point_creation_group = QGroupBox("Ajout de Point à la Séquence")
         layout = QHBoxLayout(self.point_creation_group)
         store_button = QPushButton(QIcon(ResourceManager.get_icon_path('add.png')),"Ajouter la position capsule actuelle à la liste")
@@ -225,6 +247,7 @@ class TelecommandeWindow(QMainWindow):
         return self.point_creation_group
 
     def _update_widgets_state(self):
+        """Active ou désactive les widgets en fonction de l'état (ex: mode clavier actif). (Interne)"""
         is_locked = self.keyboard_control_active
         self.jogging_group.setEnabled(not is_locked)
         self.absolute_move_group.setEnabled(not is_locked)
@@ -236,7 +259,11 @@ class TelecommandeWindow(QMainWindow):
 
     @Slot()
     def _on_add_point_to_list(self):
-        """Récupère la position actuelle et l'ajoute à la liste via une commande Undo."""
+        """Slot pour ajouter la position capsule actuelle à la liste de points.
+
+        Crée une :class:`~src.gui.commands.AddPointCommand` et la pousse sur
+        la pile Undo/Redo de la fenêtre principale.
+        """
         if not self.main_window:
             return
 
@@ -248,7 +275,7 @@ class TelecommandeWindow(QMainWindow):
 
     @Slot()
     def _on_use_first_point(self):
-        """Récupère les coordonnées du premier point de la liste et les charge dans les champs."""
+        """Slot pour charger les coordonnées du premier point de la liste dans les champs de destination."""
         if self.controller.point_manager.points:
             first_point = self.controller.point_manager.points[0]
             self.absolute_target_widgets['X'].setValue(round(first_point.x))
@@ -260,13 +287,18 @@ class TelecommandeWindow(QMainWindow):
 
     @Slot()
     def update_button_states(self):
-        """Met à jour l'état des boutons en fonction de l'état de l'application."""
+        """Met à jour l'état des boutons en fonction de l'état de l'application (ex: présence de points)."""
         has_points = bool(self.controller.point_manager.points)
         if self.use_first_point_button:  # S'assurer que le bouton a bien été créé
             self.use_first_point_button.setEnabled(has_points)
 
     @Slot(bool)
     def _on_keyboard_control_toggled(self, checked):
+        """Active ou désactive le mode de contrôle clavier temps réel.
+
+        Lorsque ce mode est activé, il capture les événements clavier et envoie
+        des commandes de jog continues au robot.
+        """
         self.keyboard_control_active = checked
         self._update_widgets_state()
         self.keyboard_layout_widget.setVisible(checked)
@@ -288,6 +320,11 @@ class TelecommandeWindow(QMainWindow):
 
     @Slot(dict, dict)
     def update_position_display(self, robot_pos: dict, capsule_pos: dict):
+        """Met à jour l'affichage des coordonnées en temps réel.
+
+        :param robot_pos: Dictionnaire des coordonnées "robot".
+        :param capsule_pos: Dictionnaire des coordonnées "capsule".
+        """
         axes = ['X', 'Y', 'Z', 'THETA', 'PHI']
         for axis in axes:
             # Affichage des coordonnées robot (toujours depuis robot_pos)
@@ -303,9 +340,10 @@ class TelecommandeWindow(QMainWindow):
 
     @Slot(dict, dict)
     def update_target_fields_after_event(self, robot_pos: dict, capsule_pos: dict):
-        """
-        Après un mouvement, met à jour les champs de destination
-        avec les données finales fournies par le contrôleur.
+        """Met à jour les champs de destination après la fin d'un mouvement.
+
+        :param robot_pos: Dictionnaire des coordonnées "robot" finales.
+        :param capsule_pos: Dictionnaire des coordonnées "capsule" finales.
         """
         if not robot_pos or not capsule_pos:
             return
@@ -317,10 +355,12 @@ class TelecommandeWindow(QMainWindow):
         self.absolute_target_widgets['PHI'].setValue(round(robot_pos.get('PHI', 0.0)))
 
     def _on_jog(self, axis, sign):
+        """Exécute un mouvement relatif (pas-à-pas). (Interne)"""
         distance = self.jog_widgets[axis].value()
         self.controller.move_robot_relative(axis.lower(), sign * distance)
 
     def _on_use_current_pos(self):
+        """Copie la position capsule actuelle dans les champs de destination absolue."""
         for axis, widget in self.capsule_pos_widgets.items():
             try:
                 current_val = int(float(widget.text()))
@@ -329,6 +369,7 @@ class TelecommandeWindow(QMainWindow):
                 continue
 
     def _on_go_absolute_capsule(self):
+        """Lance un mouvement vers la destination absolue spécifiée."""
         try:
             coords = {axis: widget.value() for axis, widget in self.absolute_target_widgets.items()}
             self.controller.move_capsule_absolute(coords)
@@ -336,6 +377,7 @@ class TelecommandeWindow(QMainWindow):
             QMessageBox.warning(self, "Erreur de saisie", "Valeurs numériques invalides.")
 
     def _on_define_position(self):
+        """Lance l'opération de redéfinition de la position (calibration)."""
         reply = QMessageBox.question(self, "Forcer la Position",
                                      "Cette action va assigner les coordonnées capsule entrées à la position physique actuelle du robot.\n"
                                      "Utilisez cette fonction pour la calibration manuelle.\n\n"
@@ -349,6 +391,10 @@ class TelecommandeWindow(QMainWindow):
             QMessageBox.warning(self, "Erreur de saisie", "Valeurs numériques invalides.")
 
     def keyPressEvent(self, event: QKeyEvent):
+        """Capture les appuis de touches lorsque le mode de contrôle clavier est actif.
+
+        Traduit l'événement clavier en une commande de jog et l'envoie au contrôleur.
+        """
         if not self.keyboard_control_active or event.isAutoRepeat():
             super().keyPressEvent(event)
             return
@@ -373,6 +419,10 @@ class TelecommandeWindow(QMainWindow):
             super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event: QKeyEvent):
+        """Capture les relâchements de touches pour arrêter le mouvement de jog.
+
+        Envoie une commande de jog avec une vitesse de 0 à l'axe correspondant.
+        """
         if not self.keyboard_control_active or event.isAutoRepeat():
             super().keyReleaseEvent(event)
             return
@@ -390,6 +440,12 @@ class TelecommandeWindow(QMainWindow):
             super().keyReleaseEvent(event)
 
     def closeEvent(self, event: QCloseEvent):
+        """Gère la fermeture de la fenêtre.
+
+        S'assure de sortir proprement du mode JOG si celui-ci était actif,
+        en effectuant une réinitialisation logicielle du contrôleur pour
+        garantir un état stable.
+        """
         if self.keyboard_control_active and self.controller.robot:
             self.controller.log_message_sent.emit("Fermeture de la télécommande: réinitialisation du contrôleur...")
             try:
