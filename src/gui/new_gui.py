@@ -784,7 +784,16 @@ class MainWindow(QMainWindow):
             self.points_table.itemChanged.connect(self._on_cell_changed)
             return
         self.points_table.setColumnCount(len(headers))
-        self.points_table.setHorizontalHeaderLabels([h.upper().replace("_", " ") for h in headers])
+        display_headers = []
+        for h in headers:
+            if h == "measurement_file":
+                display_headers.append("FICHIER DE MESURE")
+            elif h == "num_measurements":
+                display_headers.append("NB MESURES")
+            else:
+                display_headers.append(h.upper().replace("_", " "))
+
+        self.points_table.setHorizontalHeaderLabels(display_headers)
 
         integer_delegate = IntegerDelegate(self)
         numeric_columns = ['x', 'y', 'z', 'theta', 'phi', 'Nb_mesures/point']
