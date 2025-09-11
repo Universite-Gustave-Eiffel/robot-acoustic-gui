@@ -57,3 +57,23 @@ Le projet utilise `setuptools` avec un fichier `pyproject.toml` pour la gestion 
 -   **Dépendances de développement :** Elles sont listées sous la clé `[project.optional-dependencies.dev]`.
 
 ---
+## 4. Génération de l'exécutable (Packaging)
+
+Pour distribuer l'application à des utilisateurs qui n'ont pas Python, il est nécessaire de la packager en un exécutable autonome. Ce projet utilise **PyInstaller** pour cette tâche.
+
+Un fichier de configuration **`RobotAcousticGUI.spec`** est inclus dans le dépôt pour garantir que le processus de build est reproductible et inclut tous les fichiers nécessaires (icônes, configurations, etc.).
+
+### Instructions de Build
+
+1.  Assurez-vous que votre environnement de développement est correctement configuré (voir section 2) et que `pyinstaller` est installé (`pip install pyinstaller`).
+
+2.  Ouvrez un terminal à la racine du projet.
+
+3.  Lancez la commande de build en utilisant le fichier `.spec` :
+    ```bash
+    pyinstaller --noconfirm --clean .\RobotAcousticGUI.spec
+    ```
+    -   `--noconfirm` : Supprime les anciens builds sans demander de confirmation.
+    -   `--clean` : Nettoie les caches de PyInstaller avant de commencer.
+
+4.  Une fois la commande terminée, le dossier de l'application autonome se trouvera dans le répertoire **`dist/RobotAcousticGUI`**. C'est ce dossier que vous pouvez compresser en `.zip` et distribuer.
