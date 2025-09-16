@@ -15,32 +15,6 @@ Ce logiciel contrôle le robot de positionnement 5 axes de l'UMRAE et s'interfac
 
 ## 📋 Prérequis
 
-### Matériel
--   Robot de mesure avec son contrôleur **Galil DMC-2260** (unité WB 1477).
--   Système d'acquisition compatible PULSE (ex: **Brüel & Kjær type 3660**).
--   Connexion série (RS-232) entre l'ordinateur et le contrôleur robot.
-
-### Logiciel
--   **Système d'exploitation :** Windows 10 ou 11 (64-bit).
--   **Logiciel d'acquisition :** **PULSE LabShop v27.1** ou une version compatible.
-
-# Logiciel de Pilotage et d'Acquisition Acoustique
-
-Ce logiciel contrôle le robot de positionnement 5 axes de l'UMRAE et s'interface avec PULSE LabShop pour réaliser des campagnes de mesures acoustiques automatisées. Il a été développé pour moderniser l'outil existant et offrir une expérience utilisateur plus simple, robuste et flexible.
-
-![Capture d'écran du logiciel](screenshot.png)
-
-## 🚀 Fonctionnalités principales
-
--   **Gestion de listes de points :** Importation de fichiers (CSV, ASCII) et édition directe dans un tableau.
--   **Séquenceur automatisé :** Exécution d'une séquence de mesures point par point, avec déclenchement automatique de l'acquisition dans PULSE LabShop.
--   **Contrôle manuel avancé :** Une télécommande complète pour des déplacements précis (pas à pas) ou rapides (contrôle au clavier en temps réel).
--   **Gestion simplifiée des coordonnées :** Le logiciel gère automatiquement la cinématique complexe du robot. L'utilisateur ne manipule que les coordonnées réelles du microphone (coordonnées "capsule").
--   **Outils de diagnostic :** Des visionneuses de logs dédiées pour suivre les communications avec le robot et PULSE LabShop, facilitant l'identification de problèmes.
--   **Configuration centralisée :** Une fenêtre de configuration permet de régler tous les paramètres (port série, ratios moteurs, chemins, etc.) sans toucher au code.
-
-## 📋 Prérequis
-
 ### Logiciel
 -   **Système d'exploitation :** Windows 10 ou 11 (64-bit).
 -   **Logiciel d'acquisition :** **PULSE LabShop v27.1** ou une version compatible.
